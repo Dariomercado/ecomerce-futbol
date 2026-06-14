@@ -3,9 +3,9 @@
 import { Button } from "@/components/ui/button";
 
 const navigationItems = [
-  { label: "Productos", href: "/products" },
-  { label: "Categorías", href: "/categories" },
-  { label: "Destacados", href: "/featured" },
+  { label: "Catálogo", href: "/catalogo" },
+  { label: "Botines", href: "/catalogo?category=botines" },
+  { label: "Destacados", href: "/catalogo?featured=true" },
 ];
 
 export function Header() {
@@ -48,7 +48,7 @@ export function Header() {
         </nav>
 
         <Button asChild size="sm" className="hidden sm:inline-flex">
-          <Link href="/products">Ver catálogo</Link>
+          <Link href="/catalogo">Ver catálogo</Link>
         </Button>
       </div>
     </header>

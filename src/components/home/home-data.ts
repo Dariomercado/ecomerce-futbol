@@ -3,28 +3,28 @@ export const featuredCategories = [
     name: "Botines",
     description:
       "Modelos para césped natural, sintético y juego urbano con ritmo de partido.",
-    href: "/products?category=boots",
+    href: "/catalogo?category=botines",
     accent: "from-primary/80 to-secondary/80",
   },
   {
     name: "Camisetas",
     description:
       "Siluetas limpias para entrenar, jugar entre amigos o alentar desde la tribuna.",
-    href: "/products?category=jerseys",
+    href: "/catalogo?category=camisetas",
     accent: "from-premium to-secondary",
   },
   {
     name: "Entrenamiento",
     description:
       "Prendas versátiles para sesiones intensas, calentamiento y recuperación.",
-    href: "/products?category=training",
+    href: "/catalogo?category=entrenamiento",
     accent: "from-secondary to-primary/70",
   },
   {
     name: "Accesorios",
     description:
       "Agarre, espinilleras, botellas y detalles funcionales para completar el equipo.",
-    href: "/products?category=accessories",
+    href: "/catalogo?category=accesorios",
     accent: "from-accent to-primary/60",
   },
 ];
@@ -35,7 +35,7 @@ export const featuredProducts = [
     category: "Botines",
     price: "$128",
     badge: "Selección para el partido",
-    href: "/products/arena-control-boot",
+    href: "/catalogo?featured=true",
     palette: "bg-primary",
   },
   {
@@ -43,7 +43,7 @@ export const featuredProducts = [
     category: "Camisetas",
     price: "$74",
     badge: "Nueva temporada",
-    href: "/products/verde-match-jersey",
+    href: "/catalogo?featured=true",
     palette: "bg-premium",
   },
   {
@@ -51,7 +51,7 @@ export const featuredProducts = [
     category: "Entrenamiento",
     price: "$58",
     badge: "Entrenamiento",
-    href: "/products/northline-training-top",
+    href: "/catalogo?featured=true",
     palette: "bg-secondary",
   },
 ];

@@ -23,10 +23,10 @@ export function HomeHero() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-11 px-5">
-              <Link href="/products">Ver catálogo</Link>
+              <Link href="/catalogo">Ver catálogo</Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-11 px-5">
-              <Link href="/featured">Explorar destacados</Link>
+              <Link href="/catalogo?featured=true">Explorar destacados</Link>
             </Button>
           </div>
         </div>

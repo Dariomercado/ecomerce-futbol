@@ -15,7 +15,7 @@ export function FeaturedProducts() {
               Esenciales elegidos para llegar listo al partido.
             </h2>
           </div>
-          <Link href="/featured" className="text-sm font-semibold text-primary">
+          <Link href="/catalogo?featured=true" className="text-sm font-semibold text-primary">
             Ver destacados
           </Link>
         </div>

@@ -1,0 +1,81 @@
+﻿schema: spec-driven
+project: ecomerce-futbol
+detected: 2026-06-13
+persistence_mode: hybrid
+strict_tdd: false
+
+context: |
+  Stack: Next.js 16.2.9 App Router, React 19.2.4, TypeScript strict, Tailwind CSS v4 via PostCSS.
+  Package manager: pnpm 11.6.0 with pnpm-lock.yaml and packageManager metadata.
+  Architecture: UI-first storefront, mock-data-before-database, future feature-oriented catalog/cart/checkout structure.
+  Source: src/app, src/components, src/lib with @/* path alias to ./src/*.
+  UI: shadcn/Radix-style component setup is present via components.json and dependencies; lucide-react icons.
+  Deferred: Prisma, auth, payments, database migrations, and real checkout/order persistence.
+  Catalog planning: Product, Category, Brand, ProductImage, products API, Catalog UI, and Product Detail UI remain future work.
+
+testing:
+  strict_tdd: false
+  reason: No test runner or test script detected; only lint/build scripts are available.
+  runner:
+    available: false
+    framework: null
+    command: null
+  layers:
+    unit:
+      available: false
+      tool: null
+    integration:
+      available: false
+      tool: null
+    e2e:
+      available: false
+      tool: null
+  coverage:
+    available: false
+    command: null
+  quality:
+    lint:
+      available: true
+      command: pnpm lint
+      tool: ESLint 9 with eslint-config-next
+    typecheck:
+      available: true
+      command: pnpm exec tsc --noEmit
+      tool: TypeScript 5
+      scripted: false
+    formatter:
+      available: false
+      command: null
+      tool: null
+    build:
+      available: true
+      command: pnpm build
+      tool: next build
+
+rules:
+  proposal:
+    - Keep backend and persistence choices deferred until UI and catalog rules are validated.
+    - Surface documentation conflicts before treating older guardrails as authoritative.
+  specs:
+    - Use RFC 2119 keywords and Given/When/Then scenarios.
+    - Model catalog entities at the product-behavior level before database schemas.
+  design:
+    - Preserve the UI-first and mock-first architecture unless explicitly changed.
+    - Document tradeoffs before adding Prisma, API routes, auth, payments, or persistence.
+  tasks:
+    - Keep UI, data-shape, and infrastructure tasks separated for reviewability.
+    - Forecast review workload before apply.
+  apply:
+    tdd: false
+    test_command: ""
+    constraints:
+      - Do not install dependencies unless the user explicitly approves.
+      - Do not create Prisma, API routes, or new catalog pages during initialization.
+  verify:
+    test_command: ""
+    build_command: "pnpm build"
+    lint_command: "pnpm lint"
+    coverage_threshold: 0
+  archive:
+    - Preserve archived changes as audit history.
+

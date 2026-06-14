@@ -61,7 +61,6 @@ export type ProductVariant = {
   stock: number;
   price: number | null;
   sku: string | null;
-  imageId: string | null;
   isActive: boolean;
 };
 

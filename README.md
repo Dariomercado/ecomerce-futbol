@@ -1,6 +1,8 @@
 ﻿# Ecomerce Futbol
 
-Ecomerce Futbol is a UI-first football ecommerce portfolio project. The repository now has a working Next.js frontend foundation and keeps backend, auth, payment, and persistence decisions intentionally deferred.
+Ecomerce Futbol is a UI-first football ecommerce portfolio project. The repository now has a working Next.js frontend foundation, a design system foundation, and catalog-products Slice 1 implemented with local mock data.
+
+Backend, auth, payment, persistence, cart, checkout, and admin decisions remain intentionally deferred to later slices.
 
 ## Current foundation
 
@@ -12,9 +14,36 @@ Ecomerce Futbol is a UI-first football ecommerce portfolio project. The reposito
 | Source directory | `src/` |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
-| Linting | ESLint |
+| UI foundation | shadcn/ui foundation installed |
+| Theme support | `next-themes` installed |
+| Design system | Foundation in use |
+| Linting | ESLint configured |
 | Package manager | pnpm |
 | Lockfile | `pnpm-lock.yaml` committed with the project |
+
+## Catalog-products status
+
+Slice 1 is implemented and committed.
+
+| Scope | Status |
+| --- | --- |
+| Data foundation | Done with local mock data |
+| `ProductCard` / `ProductGrid` / `CatalogEmptyState` | Done |
+| `/catalogo` | Done with mock filters |
+| `/productos/[slug]` | Done with mock detail data |
+| Navigation toward `/catalogo` | Done |
+| Prisma schema | Pending for Slice 2 |
+| Product seed | Pending for Slice 2 |
+
+Not present yet:
+
+- `prisma/`
+- `src/app/api/`
+- Real cart
+- Checkout
+- Mercado Pago
+- Admin
+- Automated tests
 
 ## Quick start
 
@@ -58,16 +87,16 @@ Open http://localhost:3000.
 
 Do not add yet:
 
-- shadcn/ui
-- next-themes
 - TanStack Query
 - React Hook Form
 - Zod
-- Prisma
+- Prisma schema or migrations before Slice 2 is started
 - Supabase
 - Auth
-- Mercado Pago
-- Database migrations
-- Real checkout/order persistence
+- API routes before the public read API slice
+- Real cart behavior before the cart slice
+- Checkout/order persistence
+- Mercado Pago integration
+- Admin surfaces
 
-The next step is visual infrastructure only after the bootstrap foundation is clean and committed.
+The next step for `catalog-products` is Slice 2: Prisma schema plus product seed.

@@ -1,6 +1,6 @@
 ﻿# Project state
 
-This file records the current real workspace state after catalog-products Slice 1.
+This file records the current real workspace state after catalog-products Work Unit 2A.3.
 
 ## Workspace audit
 
@@ -18,12 +18,13 @@ This file records the current real workspace state after catalog-products Slice 
 | Styling | Tailwind CSS |
 | UI foundation | shadcn/ui foundation installed (`components.json`, `src/components/ui/button.tsx`) |
 | Theme foundation | `next-themes` installed |
+| Local database | PostgreSQL via Docker Compose (`postgres:16-alpine`) |
 | Linting | ESLint configured |
 | Local app | Confirmed responding on `localhost:3000` during bootstrap validation |
 
 ## Current implementation status
 
-Slice 1 of `catalog-products` is implemented and committed.
+Slice 1 of `catalog-products` is implemented and committed. Work Unit 2A.3 now defines local PostgreSQL infrastructure; the initial migration remains pending until local PostgreSQL is reachable.
 
 | Area | Status |
 | --- | --- |
@@ -33,7 +34,9 @@ Slice 1 of `catalog-products` is implemented and committed.
 | `/catalogo` | Implemented with mock filters |
 | `/productos/[slug]` | Implemented with mock detail data |
 | Navigation to `/catalogo` | Implemented from current navigation/home surfaces |
-| Slice 2 Prisma schema | Pending |
+| Slice 2 Prisma schema | Present under `prisma/schema.prisma` |
+| Slice 2 local PostgreSQL | Configured in `docker-compose.yml` |
+| Slice 2 initial migration | Pending; blocked until Docker/PostgreSQL is reachable |
 | Slice 2 product seed | Pending |
 
 Recent commit evidence:
@@ -46,13 +49,14 @@ Recent commit evidence:
 
 ## Explicitly not present yet
 
-- No `prisma/` directory.
 - No `src/app/api/` directory.
 - No real cart.
 - No checkout.
 - No Mercado Pago integration.
 - No admin surface.
 - No automated tests for the catalog slice.
+- No product seed yet.
+- The initial migration has not been generated/applied locally because Docker daemon access was denied during validation.
 
 ## Frontend foundation
 
@@ -81,6 +85,12 @@ Notable current values:
 - `STRICT_MODE="true"`
 
 `.env.example` exists as a safe template for future environment variables and is intentionally allowed in `.gitignore`.
+
+Current database template:
+
+```env
+DATABASE_URL="postgresql://ecomerce_futbol:ecomerce_futbol_password@localhost:5432/ecomerce_futbol?schema=public"
+```
 
 ## Cleanup completed
 
@@ -118,7 +128,6 @@ The project is still intentionally UI-first. Do not add yet:
 - TanStack Query
 - React Hook Form
 - Zod
-- Prisma schema or migrations before Slice 2 is started
 - Supabase
 - Auth
 - API routes before the public read API slice
@@ -127,4 +136,4 @@ The project is still intentionally UI-first. Do not add yet:
 - Mercado Pago integration
 - Admin surfaces
 
-Next implementation step for `catalog-products` is Slice 2: Prisma schema plus product seed.
+Next implementation step for `catalog-products` is to generate/apply the initial migration in a Docker-enabled shell, then add the Slice 2 product seed.

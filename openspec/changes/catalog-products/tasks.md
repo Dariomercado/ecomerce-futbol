@@ -2,7 +2,7 @@
 
 ## Current status
 
-Slice 1 is implemented and committed. The catalog currently uses local mock data and UI-only flows; persistence, APIs, cart, checkout, payments, admin, and automated tests are still out of scope.
+Slice 1 is implemented and committed. Work Unit 2A.3 adds local PostgreSQL infrastructure; the initial catalog migration remains pending until Docker/PostgreSQL access is available. The catalog still uses local mock data and UI-only flows; seed data, APIs, cart, checkout, payments, admin, and automated tests are still out of scope.
 
 Recent commit evidence:
 
@@ -33,7 +33,8 @@ Chain strategy: pending
 | Unit | Goal | Likely PR | Notes |
 |------|------|-----------|-------|
 | 1 | Mock catalog/detail UI | PR1 | Completed and committed; no Prisma/API/cart/checkout/admin. |
-| 2 | Prisma schema and seed | PR2 | Pending persistence foundation. |
+| 2A.3 | Local PostgreSQL infrastructure + initial migration | PR2 | Docker Compose and `DATABASE_URL` template are in place; migration application is blocked until local PostgreSQL is reachable. No seed/API/UI/cart/checkout/admin. |
+| 2B | Product seed | PR2 | Pending seed data after local database access is available. |
 | 3 | Public read API | PR3 | Pending read-only shopper data. |
 | 4 | API-backed UI | PR4 | Pending; preserve Slice 1 component contracts. |
 | 5 | Cart | PR5 | Pending product/variant selections. |
@@ -47,12 +48,29 @@ Chain strategy: pending
 - [x] 1.3 Create `src/app/productos/[slug]/page.tsx` and `src/components/catalog/{ProductGallery,VariantSelector,MockCartCTA}.tsx`.
 - [x] 1.4 Update navigation toward `/catalogo` from the header/home surfaces.
 
-## Phase 2: Slice 2 - Prisma schema + Product seed
+## Phase 2: Slice 2 - Persistence foundation
 
-Status: pending. The repository still has no `prisma/` directory.
+Status: partially implemented.
 
-- [ ] 2.1 Add `prisma/schema.prisma` models for Product, ProductVariant, Category, Brand, and ProductImage.
-- [ ] 2.2 Add `prisma/seed.ts` with proprietary brands, MVP categories, active/inactive products, variants, and ordered images.
+### Work Unit 2A.3 - Local PostgreSQL infrastructure + initial migration
+
+- [x] Add `docker-compose.yml` with a `postgres` service using `postgres:16-alpine`.
+- [x] Configure local database `ecomerce_futbol`, user `ecomerce_futbol`, password `ecomerce_futbol_password`, host port `5432`, persistent volume `postgres_data`, and `pg_isready` healthcheck.
+- [x] Document the recommended local `DATABASE_URL` in `.env.example`.
+- [ ] Generate and apply the initial catalog migration with `prisma migrate dev` once Docker daemon access is available locally.
+
+Out of scope for Work Unit 2A.3:
+
+- No seed.
+- No API routes.
+- No UI changes.
+- No real cart.
+- No checkout.
+- No admin.
+
+### Remaining Slice 2 work
+
+- [ ] Add `prisma/seed.ts` with proprietary brands, MVP categories, active/inactive products, variants, and ordered images.
 
 ## Phase 3: Slice 3 - Public read-only API
 
@@ -97,6 +115,8 @@ Read-only checks confirmed during this documentation sync:
 - `src/components/catalog/` exists with catalog grid/card, empty state, gallery, variant selector, and mock cart CTA components.
 - `src/app/catalogo/page.tsx` exists.
 - `src/app/productos/[slug]/page.tsx` exists.
-- `prisma/` does not exist yet.
+- `prisma/schema.prisma` exists.
+- Local PostgreSQL infrastructure is defined in `docker-compose.yml`, but Docker daemon access was blocked during local validation.
+- The initial Prisma migration has not been generated/applied yet because PostgreSQL was not reachable.
 - `src/app/api/` does not exist yet.
 - Automated tests have not been added for this slice.

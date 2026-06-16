@@ -87,9 +87,8 @@ Why:
 
 Decision: Prisma, API routes, Supabase, Auth, Mercado Pago, checkout persistence, real cart behavior, and admin surfaces are not part of Slice 1.
 
-Current absence is intentional:
+Current backend absence is intentional except for the Work Unit 2A.3 local PostgreSQL foundation:
 
-- No `prisma/` directory yet.
 - No `src/app/api/` directory yet.
 - No real cart yet.
 - No checkout yet.
@@ -124,3 +123,30 @@ Tradeoff:
 
 - New primitives should be added only when a real screen needs them.
 - Design system expansion should stay tied to product slices, not speculative component inventory.
+
+## ADR-007 - Use local PostgreSQL for the catalog persistence foundation
+
+Decision: Work Unit 2A.3 uses a local PostgreSQL service through Docker Compose before adding seed data, API routes, cart, checkout, or admin flows.
+
+Current configuration:
+
+- Docker image: `postgres:16-alpine`.
+- Compose service: `postgres`.
+- Database: `ecomerce_futbol`.
+- User: `ecomerce_futbol`.
+- Local development password: `ecomerce_futbol_password`.
+- Host port: `5432`.
+- Persistent volume: `postgres_data`.
+- Healthcheck: `pg_isready`.
+- Local `DATABASE_URL` template is documented in `.env.example`.
+
+Why:
+
+- The catalog schema needs a real PostgreSQL target before seed and public read APIs are added.
+- Docker Compose keeps the local persistence dependency explicit and reproducible.
+- The initial migration should be generated and reviewed independently from seed data and application routes once PostgreSQL is reachable.
+
+Tradeoff:
+
+- Local migration application depends on Docker daemon access.
+- No seed, API routes, UI changes, cart, checkout, or admin behavior is included in this work unit.

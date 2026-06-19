@@ -543,7 +543,7 @@ export const products: Product[] = [
         surface: null,
         stock: 0,
         price: null,
-        sku: null,
+        sku: "VA-LEG-DEMO-U",
         isActive: false,
       },
     ],

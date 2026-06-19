@@ -2,7 +2,7 @@
 
 ## Current status
 
-Slice 1 is implemented and committed. Work Unit 2A.3 adds local PostgreSQL infrastructure; the initial catalog migration remains pending until Docker/PostgreSQL access is available. The catalog still uses local mock data and UI-only flows; seed data, APIs, cart, checkout, payments, admin, and automated tests are still out of scope.
+Slice 1 is implemented and committed. Work Unit 2A.3 adds local PostgreSQL infrastructure; the initial catalog migration has been generated and applied to the healthy local PostgreSQL database. Work Unit 2B is complete and validated. The catalog still uses local mock data and UI-only flows; APIs, cart, checkout, payments, admin, and automated tests are still out of scope.
 
 Recent commit evidence:
 
@@ -33,8 +33,8 @@ Chain strategy: pending
 | Unit | Goal | Likely PR | Notes |
 |------|------|-----------|-------|
 | 1 | Mock catalog/detail UI | PR1 | Completed and committed; no Prisma/API/cart/checkout/admin. |
-| 2A.3 | Local PostgreSQL infrastructure + initial migration | PR2 | Docker Compose and `DATABASE_URL` template are in place; migration application is blocked until local PostgreSQL is reachable. No seed/API/UI/cart/checkout/admin. |
-| 2B | Product seed | PR2 | Pending seed data after local database access is available. |
+| 2A.3 | Local PostgreSQL infrastructure + initial migration | PR2 | Docker Compose and `DATABASE_URL` template are in place; the initial migration is generated and applied locally. No seed/API/UI/cart/checkout/admin. |
+| 2B | Product seed | PR2 | Complete and validated with natural-key upserts, fixture-scoped counts, and repeatable seed execution. |
 | 3 | Public read API | PR3 | Pending read-only shopper data. |
 | 4 | API-backed UI | PR4 | Pending; preserve Slice 1 component contracts. |
 | 5 | Cart | PR5 | Pending product/variant selections. |
@@ -57,7 +57,7 @@ Status: partially implemented.
 - [x] Add `docker-compose.yml` with a `postgres` service using `postgres:16-alpine`.
 - [x] Configure local database `ecomerce_futbol`, user `ecomerce_futbol`, password `ecomerce_futbol_password`, host port `5432`, persistent volume `postgres_data`, and `pg_isready` healthcheck.
 - [x] Document the recommended local `DATABASE_URL` in `.env.example`.
-- [ ] Generate and apply the initial catalog migration with `prisma migrate dev` once Docker daemon access is available locally.
+- [x] Generate and apply the initial catalog migration with `prisma migrate dev`.
 
 Out of scope for Work Unit 2A.3:
 
@@ -68,9 +68,13 @@ Out of scope for Work Unit 2A.3:
 - No checkout.
 - No admin.
 
-### Remaining Slice 2 work
+### Work Unit 2B - Product seed
 
-- [ ] Add `prisma/seed.ts` with proprietary brands, MVP categories, active/inactive products, variants, and ordered images.
+- [x] Add `prisma/seed.ts` with 4 MVP categories, 5 fictional brands, 8 products, 14 SKU-addressable variants, and 10 ordered images.
+- [x] Use natural-key upserts and validate fixture-scoped catalog counts in a transaction.
+- [x] Validate Prisma, generate the client, run the seed twice with identical counts, and pass TypeScript and lint checks.
+
+Size exception: The user explicitly approved Work Unit 2B above the 400-line budget because this atomic seed intentionally mirrors the complete approved fixture: 8 products, 14 variants, and 10 images. This exception applies only to Work Unit 2B.
 
 ## Phase 3: Slice 3 - Public read-only API
 
@@ -116,7 +120,10 @@ Read-only checks confirmed during this documentation sync:
 - `src/app/catalogo/page.tsx` exists.
 - `src/app/productos/[slug]/page.tsx` exists.
 - `prisma/schema.prisma` exists.
-- Local PostgreSQL infrastructure is defined in `docker-compose.yml`, but Docker daemon access was blocked during local validation.
-- The initial Prisma migration has not been generated/applied yet because PostgreSQL was not reachable.
+- Local PostgreSQL infrastructure is defined in `docker-compose.yml`, and the database is healthy.
+- The initial Prisma migration exists at `prisma/migrations/20260615232133_init_catalog_schema/migration.sql` and has been applied locally.
+- `prisma validate` and `prisma generate` passed.
+- `prisma db seed` passed twice with identical counts: 4 categories, 5 brands, 8 products, 14 variants, and 10 images.
+- `tsc --noEmit` and lint passed.
 - `src/app/api/` does not exist yet.
 - Automated tests have not been added for this slice.

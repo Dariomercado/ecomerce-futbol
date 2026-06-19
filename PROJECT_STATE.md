@@ -1,6 +1,6 @@
 ﻿# Project state
 
-This file records the current real workspace state after catalog-products Work Unit 2A.3.
+This file records the current real workspace state after catalog-products Work Unit 2B.
 
 ## Workspace audit
 
@@ -24,7 +24,7 @@ This file records the current real workspace state after catalog-products Work U
 
 ## Current implementation status
 
-Slice 1 of `catalog-products` is implemented and committed. Work Unit 2A.3 now defines local PostgreSQL infrastructure; the initial migration remains pending until local PostgreSQL is reachable.
+Slice 1 of `catalog-products` is implemented and committed. Work Unit 2A.3 defines local PostgreSQL infrastructure, and the initial catalog migration has been generated and applied to the healthy local PostgreSQL database.
 
 | Area | Status |
 | --- | --- |
@@ -36,8 +36,8 @@ Slice 1 of `catalog-products` is implemented and committed. Work Unit 2A.3 now d
 | Navigation to `/catalogo` | Implemented from current navigation/home surfaces |
 | Slice 2 Prisma schema | Present under `prisma/schema.prisma` |
 | Slice 2 local PostgreSQL | Configured in `docker-compose.yml` |
-| Slice 2 initial migration | Pending; blocked until Docker/PostgreSQL is reachable |
-| Slice 2 product seed | Pending |
+| Slice 2 initial migration | Generated at `prisma/migrations/20260615232133_init_catalog_schema/migration.sql` and applied locally |
+| Slice 2 product seed | Complete and validated: Prisma validation/generation, two idempotent seed runs with identical counts, TypeScript, and lint all passed |
 
 Recent commit evidence:
 
@@ -55,8 +55,7 @@ Recent commit evidence:
 - No Mercado Pago integration.
 - No admin surface.
 - No automated tests for the catalog slice.
-- No product seed yet.
-- The initial migration has not been generated/applied locally because Docker daemon access was denied during validation.
+- Work Unit 2B is complete and validated; future API/UI work remains pending.
 
 ## Frontend foundation
 
@@ -136,4 +135,4 @@ The project is still intentionally UI-first. Do not add yet:
 - Mercado Pago integration
 - Admin surfaces
 
-Next implementation step for `catalog-products` is to generate/apply the initial migration in a Docker-enabled shell, then add the Slice 2 product seed.
+Work Unit 2B validation is complete. The next planned slice is the public read-only API; API/UI work remains out of scope for this unit.

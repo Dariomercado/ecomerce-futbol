@@ -78,10 +78,38 @@ Size exception: The user explicitly approved Work Unit 2B above the 400-line bud
 
 ## Phase 3: Slice 3 - Public read-only API
 
-Status: pending. The repository still has no `src/app/api/` directory.
+Status: in progress. Work Unit 3A is complete; repositories and routes do not exist yet. Future public routes are namespaced under `/api/catalog/*`.
 
-- [ ] 3.1 Add `src/app/api/products/route.ts` with category, brand, price, sort, search, featured, page, and limit filters.
-- [ ] 3.2 Add `src/app/api/products/[slug]/route.ts`, `categories/route.ts`, `brands/route.ts`, `featured-products/route.ts`, and catalog mappers.
+Approved Slice 3 dependency order: 3A -> 3B -> 3C -> 3D -> 3E.
+
+### Work Unit 3A - Prisma singleton + public contracts
+
+- [x] Add the development-safe Prisma singleton in `src/lib/prisma.ts`.
+- [x] Add Prisma-independent public catalog DTOs, normalized list-query types, pagination contracts, and stable validation error types in `src/lib/catalog/public-contracts.ts`.
+
+### Work Unit 3B - Public catalog repository
+
+- [ ] Add read-only repository queries and Prisma-to-public-contract mappers.
+- [ ] Apply published/active visibility, active variant filtering, ordered images, AND-composed filters, search across name and description, sorting, and pagination.
+- [ ] Depends on 3A. No HTTP routes are part of this unit.
+
+### Work Unit 3C - Product list route
+
+- [ ] Add `GET /api/catalog/products` with normalized query validation, stable 400 errors, and the `{ data, pagination }` envelope.
+- [ ] Support category, brand, minimum/maximum price, sort, search, featured, page, and limit parameters; return `200` with `data: []` when no products match.
+- [ ] Depends on 3B.
+
+### Work Unit 3D - Product detail route
+
+- [ ] Add `GET /api/catalog/products/[slug]` using the public product-detail contract.
+- [ ] Add `GET /api/catalog/categories` and `GET /api/catalog/brands`.
+- [ ] Depends on 3C.
+
+### Work Unit 3E - Featured route + cross-endpoint hardening
+
+- [ ] Add `GET /api/catalog/featured-products`.
+- [ ] Harden validation, stable error behavior, response contracts, and visibility rules consistently across all public catalog endpoints.
+- [ ] Depends on 3D.
 
 ## Phase 4: Slice 4 - Connect UI to API
 

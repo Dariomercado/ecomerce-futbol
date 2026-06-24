@@ -12,6 +12,8 @@ import {
 } from "@/lib/catalog/public-contracts";
 import { publicCatalogRepository } from "@/lib/catalog/prisma-public-repository";
 
+export const runtime = "nodejs";
+
 export async function GET(request: Request) {
   const query = parseProductListQuery(new URL(request.url).searchParams);
 

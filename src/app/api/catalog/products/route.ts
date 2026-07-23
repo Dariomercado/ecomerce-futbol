@@ -11,6 +11,7 @@ import {
   type ProductSort,
 } from "@/lib/catalog/public-contracts";
 import { publicCatalogRepository } from "@/lib/catalog/prisma-public-repository";
+import { catalogUnavailableResponse } from "@/lib/catalog/public-route-errors";
 
 export const runtime = "nodejs";
 
@@ -21,9 +22,13 @@ export async function GET(request: Request) {
     return NextResponse.json(query.error, { status: 400 });
   }
 
-  const products = await publicCatalogRepository.findProducts(query.value);
+  try {
+    const products = await publicCatalogRepository.findProducts(query.value);
 
-  return NextResponse.json(products);
+    return NextResponse.json(products);
+  } catch {
+    return catalogUnavailableResponse();
+  }
 }
 
 type ParsedProductListQuery =

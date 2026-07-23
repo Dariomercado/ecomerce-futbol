@@ -107,8 +107,8 @@ Approved Slice 3 dependency order: 3A -> 3B -> 3C -> 3D -> 3E.
 
 ### Work Unit 3E - Featured route + cross-endpoint hardening
 
-- [ ] Add `GET /api/catalog/featured-products`.
-- [ ] Harden validation, stable error behavior, response contracts, and visibility rules consistently across all public catalog endpoints.
+- [x] Add `GET /api/catalog/featured-products`.
+- [x] Harden validation, stable error behavior, response contracts, and visibility rules consistently across all public catalog endpoints.
 - [ ] Depends on 3D.
 
 ## Phase 4: Slice 4 - Connect UI to API

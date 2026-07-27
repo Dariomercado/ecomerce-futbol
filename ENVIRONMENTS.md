@@ -1,6 +1,8 @@
-﻿# Environments
+# Environments
 
-This project currently has a local Next.js frontend foundation. Backend, auth, payment, and persistence environments remain intentionally deferred.
+The local environment currently runs Next.js with Prisma and PostgreSQL.
+Supabase Auth and Mercado Pago are selected future integrations but are not
+configured yet.
 
 ## Current environment status
 
@@ -8,11 +10,11 @@ This project currently has a local Next.js frontend foundation. Backend, auth, p
 | --- | --- |
 | Local app | Next.js app runs locally with `pnpm dev` |
 | Package manager | `pnpm` only |
-| Runtime config | No runtime environment variables required yet |
-| Safe template | `.env.example` is kept as the future env contract |
-| Auth provider | Not configured |
-| Database provider | Not configured |
-| Payment provider | Not configured |
+| Runtime config | `DATABASE_URL` is required for catalog persistence and API reads |
+| Safe template | `.env.example` documents the current local database contract |
+| Auth provider | Supabase Auth selected; not configured |
+| Database provider | PostgreSQL through Prisma; configured locally |
+| Payment provider | Mercado Pago selected; not configured |
 | Deployment provider | Not selected |
 
 ## Local development
@@ -28,24 +30,28 @@ Expected local URL:
 http://localhost:3000
 ```
 
+Local PostgreSQL runs through `docker-compose.yml`. The recommended
+`DATABASE_URL` is documented in `.env.example`.
+
 ## Environment files
 
-`.env.example` is safe to commit and documents future variables. Real environment files stay ignored by Git.
+`.env.example` is safe to commit and documents non-secret local variables. Real
+environment files stay ignored by Git.
 
 Current `.gitignore` behavior:
 
 - ignores `.env*`
 - explicitly allows `.env.example`
 
-## Deferred infrastructure
+## Integration boundaries
 
-Do not add yet:
-
-- Supabase
-- Prisma
-- Auth
-- Mercado Pago
-- database migrations
-- production deployment configuration
-
-These choices should happen only after the UI-first foundation and product assumptions are validated.
+- Supabase will provide authentication only. Its environment variables are
+  added in the dedicated authentication slice, not during documentation
+  reconciliation.
+- Prisma + PostgreSQL continue to own catalog, cart, order, and other commercial
+  data.
+- Checkout must support guests; a Supabase identity is optional for an order.
+- Admin access requires both Supabase authentication and application
+  authorization.
+- Mercado Pago and production deployment configuration remain deferred to their
+  planned slices.

@@ -1,6 +1,7 @@
 # User flows
 
-These flows describe the intended customer experience before backend implementation.
+These flows describe the intended customer experience across the current
+storefront and planned commerce slices.
 
 ## Flow 1 - Browse products
 
@@ -10,7 +11,8 @@ These flows describe the intended customer experience before backend implementat
 4. User scans product cards with image, name, price, category, and stock label.
 5. User opens a product detail page.
 
-Success condition: the user understands what is sold and can inspect a product without needing login, database, or checkout.
+Success condition: the user understands what is sold and can inspect a product
+without needing login.
 
 ## Flow 2 - Browse by category
 
@@ -33,21 +35,30 @@ Status: planned after storefront UI.
 
 Success condition: cart behavior is validated with local state before persistence.
 
-## Flow 4 - Mock checkout
+## Flow 4 - Guest checkout
 
-Status: planned after cart prototype.
+Status: planned after the cart slice.
 
 1. User reviews cart.
 2. User opens checkout.
-3. User fills mock contact/shipping data.
-4. User confirms the mock order.
-5. User reaches an order success page.
+3. User may continue as a guest; sign-in or account creation is optional.
+4. User provides contact and shipping data.
+5. User confirms payment through the approved Mercado Pago boundary.
+6. User reaches an order success page.
 
-Success condition: the checkout UX is validated before Mercado Pago is introduced.
+Success condition: a guest can place an order without authentication. When a
+customer is authenticated, the order may reference that Supabase user without
+moving order data out of Prisma + PostgreSQL.
 
 ## Flow 5 - Admin catalog management
 
-Status: deferred.
+Status: deferred until after the authentication slice.
 
-This flow requires Auth, roles, persistence, and catalog operations. It should be designed after the storefront and data model are approved.
+1. An administrator authenticates through Supabase Auth.
+2. The application verifies the authenticated identity is authorized for admin
+   operations.
+3. The administrator manages catalog data through admin-only APIs.
 
+Success condition: unauthenticated users and authenticated users without admin
+authorization cannot access catalog mutations. Authentication establishes
+identity; it does not grant authorization by itself.

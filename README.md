@@ -1,8 +1,12 @@
 ﻿# Ecomerce Futbol
 
-Ecomerce Futbol is a UI-first football ecommerce portfolio project. The repository now has a working Next.js frontend foundation, a design system foundation, and catalog-products Slice 1 implemented with local mock data.
+Ecomerce Futbol is a UI-first football ecommerce portfolio project evolving
+through reviewable slices. The repository has the storefront foundation, Prisma
+with local PostgreSQL, repeatable catalog seed data, and public read-only
+catalog APIs.
 
-Backend, auth, payment, persistence, cart, checkout, and admin decisions remain intentionally deferred to later slices.
+The next work is the API-backed UI. Cart, guest checkout, Mercado Pago,
+Supabase Auth, and authenticated admin authorization remain future slices.
 
 ## Current foundation
 
@@ -20,10 +24,14 @@ Backend, auth, payment, persistence, cart, checkout, and admin decisions remain 
 | Linting | ESLint configured |
 | Package manager | pnpm |
 | Lockfile | `pnpm-lock.yaml` committed with the project |
+| Catalog persistence | Prisma + local PostgreSQL |
+| Public catalog API | Implemented under `/api/catalog/*` |
+| Authentication | Supabase Auth selected; not configured |
 
 ## Catalog-products status
 
-Slice 1 is implemented and committed.
+Slices 1 through 3 are implemented and committed. Current task-ledger progress
+is **25/36 complete, 11 pending, with no blockers**.
 
 | Scope | Status |
 | --- | --- |
@@ -32,17 +40,19 @@ Slice 1 is implemented and committed.
 | `/catalogo` | Done with mock filters |
 | `/productos/[slug]` | Done with mock detail data |
 | Navigation toward `/catalogo` | Done |
-| Prisma schema | Pending for Slice 2 |
-| Product seed | Pending for Slice 2 |
+| Prisma schema and migration | Done |
+| Product seed | Done and repeatable |
+| Public catalog API | Done |
+| Home featured products API-backed | Next: Work Unit 4A |
+| Catalog/detail API-backed | Pending: Work Unit 4B |
 
 Not present yet:
 
-- `prisma/`
-- `src/app/api/`
 - Real cart
-- Checkout
+- Guest checkout and order persistence
 - Mercado Pago
-- Admin
+- Supabase Auth
+- Authenticated admin authorization and admin UI
 - Automated tests
 
 ## Quick start
@@ -85,18 +95,17 @@ Open http://localhost:3000.
 
 ## Current guardrails
 
-Do not add yet:
+- Preserve existing UI contracts while Work Units 4A and 4B replace mock reads
+  with public API reads.
+- Keep public catalog routes read-only.
+- Use Supabase for authentication only; keep catalog, cart, order, and other
+  commercial data in Prisma + PostgreSQL.
+- Guest checkout is required. Customer accounts are optional, and an order may
+  optionally reference an authenticated Supabase user.
+- Authentication does not imply admin authorization. Implement admin only after
+  both boundaries are present.
+- Do not add cart, checkout, Mercado Pago, Auth, or admin behavior before its
+  planned slice.
 
-- TanStack Query
-- React Hook Form
-- Zod
-- Prisma schema or migrations before Slice 2 is started
-- Supabase
-- Auth
-- API routes before the public read API slice
-- Real cart behavior before the cart slice
-- Checkout/order persistence
-- Mercado Pago integration
-- Admin surfaces
-
-The next step for `catalog-products` is Slice 2: Prisma schema plus product seed.
+The next step for `catalog-products` is Slice 4, Work Unit 4A: connect the home
+featured-products section to the public API.

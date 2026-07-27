@@ -1,6 +1,8 @@
 # Project vision
 
-This project is a portfolio-grade football ecommerce concept. It should prove product thinking, UI craft, frontend architecture, and interview-ready decision making before any backend or payment integration exists.
+This project is a portfolio-grade football ecommerce concept. It demonstrates
+product thinking, UI craft, incremental architecture, and interview-ready
+decision making from a mock-first storefront toward real commerce boundaries.
 
 ## Goals
 
@@ -21,9 +23,11 @@ The project should communicate:
 - Maintainable frontend boundaries.
 - Backend readiness without premature infrastructure.
 
-## MVP scope
+## Original storefront MVP scope
 
-The MVP is a mock-driven storefront focused on validating the public shopping experience.
+The first MVP was a mock-driven storefront focused on validating the public
+shopping experience. That slice is complete; persistence and the public catalog
+API were added in later slices.
 
 Required MVP scope:
 
@@ -63,7 +67,7 @@ Planned V2 scope:
 - Product option selection for size, color, or variant.
 - Initial account and admin route placeholders if needed for navigation planning.
 
-## Expected final stack
+## Delivery stack
 
 | Area | Expected direction |
 | --- | --- |
@@ -71,10 +75,12 @@ Planned V2 scope:
 | Frontend | Next.js |
 | Styling | Tailwind CSS |
 | UI primitives | shadcn/ui, customized with project tokens |
-| Data source first slice | Local mock data |
+| Data source first slice | Local mock data; migration to the public API is Slice 4 |
 | Testing | Vitest, Testing Library, Playwright when the app exists |
-| Backend later | Supabase and/or Prisma after UI validation |
-| Auth later | Deferred until account/admin requirements are real |
+| Commercial data | Prisma + PostgreSQL for catalog, cart, orders, and related records |
+| Authentication | Supabase Auth in a future slice |
+| Customer account | Optional; checkout remains available to guests |
+| Admin access | Supabase-authenticated identity plus application authorization |
 | Payments later | Mercado Pago after checkout assumptions are validated |
 
 ## Mandatory functionality
@@ -108,6 +114,6 @@ Planned V2 scope:
 | Product | The project reads as a focused football ecommerce brand with clear MVP boundaries. |
 | UX | A reviewer can follow discovery -> product detail -> cart/checkout planning without guessing missing flows. |
 | UI | The interface feels modern, athletic, professional, and elegant. |
-| Architecture | Documentation explains why backend integrations are deferred and how they will be added later. |
+| Architecture | Documentation explains the boundary between Supabase identity, application authorization, and Prisma/PostgreSQL commercial data. |
 | Portfolio | The project can be discussed in interviews as a deliberate architecture and product case study. |
 | Maintainability | Future code can follow feature-oriented structure without mixing catalog, cart, checkout, and admin concerns. |

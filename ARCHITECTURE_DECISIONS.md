@@ -83,18 +83,16 @@ Why:
 - Avoids dumping all components into one generic folder.
 - Supports gradual migration from mocks to real services.
 
-## ADR-005 - Backend integrations are deferred
+## ADR-005 - Slice 1 deferred backend integrations
 
 Decision: Prisma, API routes, Supabase, Auth, Mercado Pago, checkout persistence, real cart behavior, and admin surfaces are not part of Slice 1.
 
-Current backend absence is intentional except for the Work Unit 2A.3 local PostgreSQL foundation:
+That boundary enabled incremental delivery. The current state has advanced:
 
-- No `src/app/api/` directory yet.
-- No real cart yet.
-- No checkout yet.
-- No Mercado Pago integration yet.
-- No admin surface yet.
-- No automated tests yet.
+- Prisma, local PostgreSQL, the catalog migration and seed are implemented.
+- Read-only public catalog APIs exist under `/api/catalog/*`.
+- Real cart, checkout, Mercado Pago, Supabase Auth, admin, and automated tests
+  remain pending.
 
 Why:
 
@@ -150,3 +148,33 @@ Tradeoff:
 
 - Local migration application depends on Docker daemon access.
 - No seed, API routes, UI changes, cart, checkout, or admin behavior is included in this work unit.
+
+## ADR-008 - Separate identity from commercial data and authorization
+
+Decision:
+
+- Use Supabase for authentication only.
+- Keep Prisma + PostgreSQL as the authoritative data layer for catalog, cart,
+  orders, and other commercial records.
+- Allow checkout without authentication. Customer accounts are optional, and an
+  order may contain a nullable reference to an authenticated Supabase user.
+- Require Supabase authentication for administrative access, followed by a
+  separate application authorization check.
+
+Why:
+
+- Guest checkout avoids making account creation a purchase barrier.
+- Optional identity still allows future order history and returning-customer
+  features.
+- Keeping commercial data in one Prisma/PostgreSQL boundary avoids splitting
+  domain ownership between Supabase and the existing persistence layer.
+- Authentication answers who the user is; authorization answers what that user
+  may do. A valid session alone must never grant admin privileges.
+
+Tradeoff:
+
+- Orders must support both guest contact data and an optional external user ID.
+- The authentication slice must define session handling and the admin
+  authorization policy before the admin slice begins.
+- Supabase credentials and dependencies remain deferred until the authentication
+  work unit; this ADR does not configure them.

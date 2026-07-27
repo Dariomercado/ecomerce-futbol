@@ -10,6 +10,7 @@
 - [x] 2B Add the repeatable product seed and fixture validation.
 - [x] 3A Add the Prisma singleton and public catalog contracts.
 - [x] 3E Add the featured-products endpoint and public API hardening.
+- [x] 4.1 Replace the home featured-products fixture read with `GET /api/catalog/featured-products`.
 
 ## Work Unit Evidence: 3E
 
@@ -19,10 +20,18 @@
 | Runtime harness | Existing local Next development server at `http://localhost:3000`: `GET /api/catalog/featured-products` returned `200` with four card summaries; `?limit=2` returned `200` with two card summaries; `?limit=0` returned the stable `400 INVALID_CATALOG_QUERY` body. `GET /api/catalog/products?limit=0` also returned stable `400 INVALID_CATALOG_QUERY`. |
 | Rollback boundary | Revert `src/app/api/catalog/featured-products/route.ts`, `src/lib/catalog/public-route-errors.ts`, and the catalog route error-boundary edits only; no repository, schema, seed, or UI behavior is coupled to this unit. |
 
+## Work Unit Evidence: 4A
+
+| Evidence | Result |
+|---|---|
+| Focused validation | `pnpm.cmd lint` exited `0`; `.\\node_modules\\.bin\\tsc.CMD --noEmit --incremental false` exited `0`. There is no test runner. |
+| Runtime harness | Local Next dev server: `GET /api/catalog/featured-products` returned `200` with four public card summaries, including product slugs, ARS prices, compare-at prices, categories, and brands. `GET /` returned `200` and the client-rendered home section exposed its loading label. `GET /api/catalog/featured-products?limit=0` returned the stable `400 INVALID_CATALOG_QUERY` error. |
+| Rollback boundary | Revert `src/components/home/featured-products.tsx` to restore the local fixture rendering; no API, schema, seed, cart, checkout, auth, or admin behavior is coupled to this work unit. |
+
 ## Deviations
 
-None — the feature route uses the public catalog repository and returns card summaries, while existing endpoint contracts remain unchanged.
+None. The home section consumes the public browser endpoint instead of an internal server-side self-fetch, avoiding Next.js deployment-origin coupling while retaining a visible loading and error state.
 
 ## Remaining Work
 
-18 of 33 tasks remain in `tasks.md`, including Work Units 3B–3D checkbox reconciliation and Slices 4–7. This work unit does not implement UI, cart, checkout, payments, or admin behavior.
+10 of 36 tasks remain in `tasks.md`, beginning with Work Unit 4B. This work unit does not implement catalog/detail API reads, cart, checkout, payments, authentication, or admin behavior.

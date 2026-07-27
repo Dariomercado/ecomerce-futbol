@@ -2,7 +2,7 @@
 
 ## Current status
 
-Slices 1 through 3 are implemented and committed. Local PostgreSQL, the initial catalog migration, repeatable seed data, and the public read-only catalog API are complete. The catalog UI still reads local mock data. API-backed UI, cart, guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 25/36 tasks complete, with 11 pending and no blockers.
+Slices 1 through 3 are implemented and committed. Local PostgreSQL, the initial catalog migration, repeatable seed data, and the public read-only catalog API are complete. Home featured products use the public API; catalog and detail UI still read local mock data. Cart, guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 26/36 tasks complete, with 10 pending and no blockers.
 
 Recent commit evidence:
 
@@ -36,7 +36,7 @@ Chain strategy: stacked-to-main
 | 2A.3 | Local PostgreSQL infrastructure + initial migration | PR2 | Docker Compose and `DATABASE_URL` template are in place; the initial migration is generated and applied locally. No seed/API/UI/cart/checkout/admin. |
 | 2B | Product seed | PR2 | Complete and validated with natural-key upserts, fixture-scoped counts, and repeatable seed execution. |
 | 3 | Public read API | PR3 | Complete through Work Unit 3E; final commit `62bc8ec`. |
-| 4A | Home API-backed | PR4 | Pending featured-products API consumption; preserve the current home UI contract. |
+| 4A | Home API-backed | PR4 | Complete; home consumes featured-products API and preserves its UI contract. |
 | 4B | Catalog and detail API-backed | PR4 | Pending list/detail API consumption; preserve Slice 1 component contracts. |
 | 5 | Cart | PR5 | Pending product/variant selections. |
 | 6 | Guest checkout + Mercado Pago | PR6 | Pending payment flow after cart; authentication must remain optional. |
@@ -115,11 +115,11 @@ Approved Slice 3 dependency order: 3A -> 3B -> 3C -> 3D -> 3E.
 
 ## Phase 4: Slice 4 - Connect UI to API
 
-Status: pending. Home featured products, catalog listing, and product detail still use local mock data.
+Status: in progress. Home featured products use the public featured-products API; catalog listing and product detail remain mock-backed pending Work Unit 4B.
 
 ### Work Unit 4A - Home API-backed
 
-- [ ] 4.1 Replace the home featured-products fixture read with `GET /api/catalog/featured-products`, preserving the established home section layout, links, price display, loading/error behavior, and public product visibility contract.
+- [x] 4.1 Replace the home featured-products fixture read with `GET /api/catalog/featured-products`, preserving the established home section layout, links, price display, loading/error behavior, and public product visibility contract.
 
 ### Work Unit 4B - Catalog listing and product detail API-backed
 

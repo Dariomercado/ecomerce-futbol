@@ -1,8 +1,61 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { featuredProducts } from "@/components/home/home-data";
+import type { ProductSummary } from "@/lib/catalog/public-contracts";
+
+const featuredProductsUrl = "/api/catalog/featured-products";
+
+const priceFormatter = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 0,
+});
+
+const productPalettes = ["bg-primary", "bg-premium", "bg-secondary"];
 
 export function FeaturedProducts() {
+  const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [status, setStatus] = useState<"loading" | "error" | "success">(
+    "loading",
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadFeaturedProducts() {
+      try {
+        const response = await fetch(featuredProductsUrl, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Featured products request failed.");
+        }
+
+        const data: unknown = await response.json();
+
+        if (!Array.isArray(data)) {
+          throw new Error("Featured products response was invalid.");
+        }
+
+        setProducts(data as ProductSummary[]);
+        setStatus("success");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setStatus("error");
+      }
+    }
+
+    void loadFeaturedProducts();
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <section className="bg-surface/60 px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -21,36 +74,76 @@ export function FeaturedProducts() {
         </div>
 
         <div className="grid gap-5 md:grid-cols-3">
-          {featuredProducts.map((product) => (
-            <Link
-              key={product.name}
-              href={product.href}
-              className="group rounded-3xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-1 hover:border-primary/40"
-            >
-              <div
-                className={`relative h-64 overflow-hidden rounded-2xl ${product.palette}`}
-              >
-                <div className="absolute left-5 top-5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
-                  {product.badge}
+          {status === "loading"
+            ? Array.from({ length: 3 }, (_, index) => (
+                <div
+                  key={index}
+                  aria-label="Cargando productos destacados"
+                  className="animate-pulse rounded-3xl border border-border bg-card p-4"
+                >
+                  <div className="h-64 rounded-2xl bg-muted" />
+                  <div className="space-y-3 p-2 pt-4">
+                    <div className="h-4 w-2/3 rounded bg-muted" />
+                    <div className="h-6 w-4/5 rounded bg-muted" />
+                  </div>
                 </div>
-                <div className="absolute inset-x-8 bottom-8 h-28 rounded-full border border-primary-foreground/45" />
-                <div className="absolute bottom-10 left-1/2 h-32 w-4 -translate-x-1/2 rounded-full bg-primary-foreground/80" />
-              </div>
+              ))
+            : null}
 
-              <div className="space-y-3 p-2 pt-4">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {product.category}
-                  </p>
-                  <p className="font-semibold text-foreground">{product.price}</p>
-                </div>
-                <h3 className="font-heading text-xl font-semibold">
-                  {product.name}
-                </h3>
-                <p className="text-sm font-semibold text-primary">Ver producto</p>
-              </div>
-            </Link>
-          ))}
+          {status === "error" ? (
+            <p className="rounded-3xl border border-border bg-card p-6 text-sm text-muted-foreground md:col-span-3">
+              No pudimos cargar los productos destacados. Intentá nuevamente en unos minutos.
+            </p>
+          ) : null}
+
+          {status === "success" && products.length === 0 ? (
+            <p className="rounded-3xl border border-border bg-card p-6 text-sm text-muted-foreground md:col-span-3">
+              No hay productos destacados disponibles por el momento.
+            </p>
+          ) : null}
+
+          {status === "success"
+            ? products.map((product, index) => (
+                <Link
+                  key={product.id}
+                  href="/catalogo?featured=true"
+                  className="group rounded-3xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-1 hover:border-primary/40"
+                >
+                  <div
+                    className={`relative h-64 overflow-hidden rounded-2xl ${productPalettes[index % productPalettes.length]}`}
+                  >
+                    <div className="absolute left-5 top-5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
+                      {product.brand.name}
+                    </div>
+                    <div className="absolute inset-x-8 bottom-8 h-28 rounded-full border border-primary-foreground/45" />
+                    <div className="absolute bottom-10 left-1/2 h-32 w-4 -translate-x-1/2 rounded-full bg-primary-foreground/80" />
+                  </div>
+
+                  <div className="space-y-3 p-2 pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {product.category.name}
+                      </p>
+                      <div className="text-right">
+                        <p className="font-semibold text-foreground">
+                          {priceFormatter.format(product.price)}
+                        </p>
+                        {product.compareAtPrice !== null &&
+                        product.compareAtPrice > product.price ? (
+                          <p className="text-xs text-muted-foreground line-through">
+                            {priceFormatter.format(product.compareAtPrice)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <h3 className="font-heading text-xl font-semibold">
+                      {product.name}
+                    </h3>
+                    <p className="text-sm font-semibold text-primary">Ver producto</p>
+                  </div>
+                </Link>
+              ))
+            : null}
         </div>
       </div>
     </section>

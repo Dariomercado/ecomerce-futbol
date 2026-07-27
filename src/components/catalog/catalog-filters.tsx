@@ -1,10 +1,13 @@
 ﻿import Link from "next/link";
 
-import type { Brand, Category } from "@/lib/catalog/types";
+import type {
+  BrandSummary,
+  CategorySummary,
+} from "@/lib/catalog/public-contracts";
 
 type CatalogFiltersProps = {
-  brands: Brand[];
-  categories: Category[];
+  brands: BrandSummary[];
+  categories: CategorySummary[];
   selectedBrand?: string;
   selectedCategory?: string;
   featuredOnly: boolean;

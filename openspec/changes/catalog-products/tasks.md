@@ -1,8 +1,8 @@
-﻿# Tasks: Catalog Products
+# Tasks: Catalog Products
 
 ## Current status
 
-Slices 1 through 3 are implemented and committed. Local PostgreSQL, the initial catalog migration, repeatable seed data, and the public read-only catalog API are complete. Home featured products use the public API; catalog and detail UI still read local mock data. Cart, guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 26/36 tasks complete, with 10 pending and no blockers.
+Slices 1 through 3 are implemented and committed. Local PostgreSQL, the initial catalog migration, repeatable seed data, and the public read-only catalog API are complete. Home featured products, catalog listing, and product detail use the public catalog backend. Cart, guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 28/36 tasks complete, with 8 pending and no blockers.
 
 Recent commit evidence:
 
@@ -115,7 +115,7 @@ Approved Slice 3 dependency order: 3A -> 3B -> 3C -> 3D -> 3E.
 
 ## Phase 4: Slice 4 - Connect UI to API
 
-Status: in progress. Home featured products use the public featured-products API; catalog listing and product detail remain mock-backed pending Work Unit 4B.
+Status: complete. Home featured products, catalog listing, and product detail use the public catalog backend.
 
 ### Work Unit 4A - Home API-backed
 
@@ -123,8 +123,8 @@ Status: in progress. Home featured products use the public featured-products API
 
 ### Work Unit 4B - Catalog listing and product detail API-backed
 
-- [ ] 4.2 Replace local reads in `src/app/catalogo/page.tsx` and `src/app/productos/[slug]/page.tsx` with the public products, categories, brands, and product-detail APIs while preserving existing component contracts and URL filter behavior.
-- [ ] 4.3 Run focused scenario verification for home featured products, catalog filters, empty results, product not found, sale pricing, gallery ordering, and active variant selection using API data.
+- [x] 4.2 Replace local reads in `src/app/catalogo/page.tsx` and `src/app/productos/[slug]/page.tsx` with the public products, categories, brands, and product-detail APIs while preserving existing component contracts and URL filter behavior.
+- [x] 4.3 Run focused scenario verification for home featured products, catalog filters, empty results, product not found, sale pricing, gallery ordering, and active variant selection using API data.
 
 ## Phase 5: Slice 5 - Cart
 

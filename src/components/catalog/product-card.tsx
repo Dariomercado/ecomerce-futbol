@@ -1,6 +1,6 @@
 ﻿import Link from "next/link";
 
-import type { ProductWithRelations } from "@/lib/catalog/types";
+import type { ProductSummary } from "@/lib/catalog/public-contracts";
 
 const priceFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -9,17 +9,13 @@ const priceFormatter = new Intl.NumberFormat("es-AR", {
 });
 
 type ProductCardProps = {
-  product: ProductWithRelations;
+  product: ProductSummary;
 };
 
-const getPrimaryImage = (product: ProductWithRelations) =>
-  product.images.find((image) => image.isPrimary) ?? product.images[0];
-
-const isOnSale = (product: ProductWithRelations) =>
+const isOnSale = (product: ProductSummary) =>
   product.compareAtPrice !== null && product.compareAtPrice > product.price;
 
 export function ProductCard({ product }: ProductCardProps) {
-  const primaryImage = getPrimaryImage(product);
   const onSale = isOnSale(product);
 
   return (
@@ -30,7 +26,7 @@ export function ProductCard({ product }: ProductCardProps) {
       >
         <div className="relative aspect-[4/3] overflow-hidden bg-surface">
           <div
-            aria-label={primaryImage?.alt ?? product.name}
+            aria-label={product.primaryImage?.alt ?? product.name}
             className="flex size-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.18),transparent_35%),linear-gradient(135deg,hsl(var(--muted)),hsl(var(--surface)))] text-center"
             role="img"
           >

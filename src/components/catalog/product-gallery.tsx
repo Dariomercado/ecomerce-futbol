@@ -1,12 +1,12 @@
-﻿import type { ProductImage } from "@/lib/catalog/types";
+import type { ProductImageDto } from "@/lib/catalog/public-contracts";
 
 type ProductGalleryProps = {
-  images: ProductImage[];
+  images: ProductImageDto[];
   productName: string;
 };
 
 export function ProductGallery({ images, productName }: ProductGalleryProps) {
-  const [primaryImage, ...secondaryImages] = images;
+  const [primaryImage, ...secondaryImages] = [...images].sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || left.position - right.position);
 
   return (
     <div className="space-y-4">

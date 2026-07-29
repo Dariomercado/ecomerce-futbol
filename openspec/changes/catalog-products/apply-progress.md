@@ -13,6 +13,9 @@
 - [x] 4.1 Replace the home featured-products fixture read with `GET /api/catalog/featured-products`.
 - [x] 4.2 Replace local catalog/detail reads with public catalog data.
 - [x] 4.3 Verify API-backed catalog/detail scenarios.
+- [x] 5.1 Add cart types/state under `src/lib/cart/` for product and variant selections.
+- [x] 5.2 Add cart UI, `/carrito`, and real cart behavior for `MockCartCTA`.
+- [x] 5.3 Carry selected-variant stock into cart lines and prevent add/increment operations from exceeding that bound.
 
 ## Work Unit Evidence: 3E
 
@@ -38,10 +41,30 @@
 | Runtime harness | Hydrated Chrome/CDP at `http://localhost:3109`: filter transition `/catalogo` -> `?category=botines` showed zero prior results under the new URL, then exactly terreno/control products; intercepted pagination metadata `total=25,totalPages=3` produced next/previous links preserving `category=botines`, `brand=arena-control`, `featured=true`, changing only `page`. Prior current-candidate runtime verified API filters/empty, detail success/404, sale prices `112000`/`132000`, primary gallery, and variant click `112000->115000`. |
 | Rollback boundary | Revert 4B catalog/detail pages and presentation components only; no endpoint, schema, seed, cart, checkout, auth, or admin changes. |
 
+## Work Unit Evidence: 5
+
+| Evidence | Result |
+|---|---|
+| Focused validation | `pnpm.cmd lint` exited `0`; `.\\node_modules\\.bin\\tsc.CMD --noEmit --incremental false` exited `0`; `git diff --check` exited `0`. No automated test runner is configured. |
+| Runtime harness | Manual browser scenario on the existing localhost app: selected an active product variant, added it to cart, increased quantity, used `Quitar`, and confirmed the full cart line was removed and the cart became empty. Repeated add/increase and reloaded the browser; the in-memory cart reset to empty. `cart-content.tsx` independently confirms decrement (`setQuantity(quantity - 1)`) is distinct from full-line removal (`removeItem(lineId)`). |
+| Rollback boundary | Revert `src/lib/cart/`, `src/components/cart/`, `src/app/carrito/page.tsx`, and the cart-provider/CTA/header wiring in `src/app/layout.tsx`, `src/components/layout/header.tsx`, `src/components/catalog/mock-cart-cta.tsx`, and `src/components/catalog/product-detail-api-content.tsx`; no persistence, checkout, payment, auth, API, or catalog data behavior is coupled to this unit. |
+
+## Work Unit Evidence: 5.3
+
+| Evidence | Result |
+|---|---|
+| Canonical path proof | The 5.3 delta is the `stock` field on cart selection/item contracts; bounded pure add/set-quantity transitions and provider delegation; at-stock increment disabled behavior; and selected-variant stock handoff from the CTA. It is implemented within `src/lib/cart/types.ts`, `src/lib/cart/cart-state.ts`, `src/lib/cart/cart-provider.tsx`, `src/components/cart/cart-content.tsx`, and `src/components/catalog/mock-cart-cta.tsx`. |
+| Prior focused validation | `pnpm.cmd lint` exit `0` (stdout SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, stderr `ebfee82d478f07b1e725885398b7046100b7b6a51ffc6438f52db8dc0230ea78`); `.\\node_modules\\.bin\\tsc.CMD --noEmit --incremental false` exit `0` (stdout/stderr SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`); `git diff --check` exit `0` (stdout `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, stderr `a630170082c8eabd402e766c7b217aa3fbde96a2315c461f0f010611fde01ac1`). Casing warnings: `0`. |
+| Prior production build | `node node_modules/next/dist/bin/next build --webpack` exit `0`; build ID `jaU6qM_bm-BmQEX2LYwaM`; stdout SHA-256 `c8824a634154c063ab9e94e75b4bcb1609c0b77815e511615f1a479b44019948`, stderr `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. Relevant cart sources predate `.next/BUILD_ID`. |
+| Runtime matrix | `node %TEMP%\\ecomerce-futbol-cart-5-3-final\\cart-runtime-matrix.cjs C:\\Users\\DARIO-PC\\Desktop\\ecomerce-futbol %TEMP%\\ecomerce-futbol-cart-5-3-final\\runtime-out` exit `0`; ports Next `3131` and CDP `9341`; a-i all PASS; `allPass:true`; console errors `0`; E56 `0`; static failures `0`. Assertion d proves one line, quantity `2`, header `Carrito (2)`, and a quantity-coherent doubled total. Raw SHA-256: harness `3a473a1c58239cf0cca1ea39edb56d363aac558d21da58fed6c977d31f59efaf`; wrapper stdout `315430bb4b0f114dabd7ff4df255be3ef1cb43eec84aa3f23352711235aa71b8`; wrapper stderr `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; Next stdout `84e53d702ded3b70e22a46ab97e3e529805fe9502d3e7ab7b1ac17cf31f681d1`; Next stderr `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; report `34ea4689af2beba779ec897127a06b00c8b5ad74674217ffc34bdaa645003140`. Report: `%TEMP%\\ecomerce-futbol-cart-5-3-final\\runtime-out\\cart-runtime-matrix.json`. |
+| Network note | Four `Network.loadingFailed` events reappeared, each non-static `canceled:true` with `net::ERR_ABORTED` during navigation; they are retained as observed rather than hidden. |
+| Rollback boundary | Revert only the 5.3 delta: stock fields on cart selection/item, bounded transition/helper and provider delegation, the at-stock disabled cap, and CTA stock handoff. Preserve the five files and their 5.1/5.2 cart types, line operations, UI, route, and baseline add behavior. |
+
+
 ## Deviations
 
 Catalog uses client Route Handler fetches for interactive states; the detail Server Component invokes the public detail Route Handler in-process and maps its `404` to `notFound()`.
 
 ## Remaining Work
 
-8 of 36 tasks remain, beginning with Slice 5 cart.
+6 of 37 tasks remain, beginning with Slice 6 guest checkout and Mercado Pago.

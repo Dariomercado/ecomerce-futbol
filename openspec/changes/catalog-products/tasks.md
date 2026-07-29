@@ -2,7 +2,7 @@
 
 ## Current status
 
-Slices 1 through 3 are implemented and committed. Local PostgreSQL, the initial catalog migration, repeatable seed data, and the public read-only catalog API are complete. Home featured products, catalog listing, and product detail use the public catalog backend. Cart, guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 28/36 tasks complete, with 8 pending and no blockers.
+Phases 1 through 5 are complete. Phase 5 delivers a local, session-only cart with selected-variant stock bounds verified by the external runtime matrix. Local PostgreSQL, the initial catalog migration, repeatable seed data, the public read-only catalog API, and API-backed home/catalog/detail UI are complete. Guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 31/37 tasks complete, with 6 pending.
 
 Recent commit evidence:
 
@@ -37,8 +37,8 @@ Chain strategy: stacked-to-main
 | 2B | Product seed | PR2 | Complete and validated with natural-key upserts, fixture-scoped counts, and repeatable seed execution. |
 | 3 | Public read API | PR3 | Complete through Work Unit 3E; final commit `62bc8ec`. |
 | 4A | Home API-backed | PR4 | Complete; home consumes featured-products API and preserves its UI contract. |
-| 4B | Catalog and detail API-backed | PR4 | Pending list/detail API consumption; preserve Slice 1 component contracts. |
-| 5 | Cart | PR5 | Pending product/variant selections. |
+| 4B | Catalog and detail API-backed | PR4 | Complete; list/detail UI consumes public APIs while preserving Slice 1 component contracts. |
+| 5 | Cart | PR5 | Complete: local/session-only cart with selected-variant stock bounds verified by the external runtime matrix. |
 | 6 | Guest checkout + Mercado Pago | PR6 | Pending payment flow after cart; authentication must remain optional. |
 | 7 | Supabase Auth | PR7 | Pending optional customer identity and required admin identity; no catalog/commercial data migration. |
 | 8 | Product admin | PR8 | Pending admin CRUD with authenticated authorization, separated from public API. |
@@ -128,10 +128,11 @@ Status: complete. Home featured products, catalog listing, and product detail us
 
 ## Phase 5: Slice 5 - Cart
 
-Status: pending. There is no real cart yet.
+Status: complete. The local, session-only cart supports real product and variant selections without checkout or persistence, and selected-variant stock bounds are covered by the external runtime matrix.
 
-- [ ] 5.1 Add cart types/state under `src/lib/cart/` for product and variant selections.
-- [ ] 5.2 Add `src/components/cart/*`, `src/app/carrito/page.tsx`, and real cart behavior for `MockCartCTA`.
+- [x] 5.1 Add cart types/state under `src/lib/cart/` for product and variant selections.
+- [x] 5.2 Add `src/components/cart/*`, `src/app/carrito/page.tsx`, and real cart behavior for `MockCartCTA`.
+- [x] 5.3 Carry selected-variant stock into cart lines and prevent add/increment operations from exceeding that bound; add focused runtime coverage for zero-stock and at-stock behavior.
 
 ## Phase 6: Slice 6 - Guest checkout + Mercado Pago
 

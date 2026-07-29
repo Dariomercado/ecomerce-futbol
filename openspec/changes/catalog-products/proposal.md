@@ -1,68 +1,75 @@
-﻿# Proposal: Catalog Products
+# Proposal: Catalog Products Through Local Cart
 
 ## Intent
 
-Define the catalog foundation for a football ecommerce storefront: product concepts, future read APIs, catalog browsing, and product detail UX. The first implementation slice must validate behavior with local typed mock data before adding persistence, APIs, cart, or checkout.
+Deliver the catalog foundation and the first usable shopping flow for a football ecommerce storefront. The active change now covers the accumulated work from Slice 1 through Phase 5: typed catalog UI, PostgreSQL persistence, public read APIs, API-backed catalog/detail screens, and a local session-only cart.
+
+Slice 1 intentionally validated the catalog and product-detail experience with typed local mock data and no backend or cart state. That boundary remains part of the delivery history; later phases deliberately expanded the active change.
 
 ## Scope
 
 ### In Scope
-- Conceptual `Product`, `ProductVariant`, `Category`, `Brand`, and `ProductImage` rules.
-- Future public read-only API contracts for product list, detail, featured products, categories, and brands.
-- `/catalogo` UI planning with category, brand, featured filters, responsive grid, and empty state.
-- `/productos/[slug]` UI planning with gallery, optional variants, and disabled/mock cart CTA.
+
+- `Product`, `ProductVariant`, `Category`, `Brand`, and `ProductImage` domain rules.
+- PostgreSQL/Prisma catalog persistence and repeatable seed data.
+- Public read-only product, detail, featured-product, category, and brand APIs.
+- API-backed `/catalogo` and `/productos/[slug]` experiences.
+- Variant selection where applicable, including unavailable-stock feedback.
+- A local, session-only `/carrito` flow with product/variant line identity, equivalent-line consolidation, quantity controls, totals, header count, removal, and empty state.
+- Cart quantity bounded by the selected variant's available stock.
 
 ### Out of Scope
-- Prisma, database, seed, Route Handlers, Server Actions, Supabase, payments, real cart, checkout, admin CRUD, uploads, promotion engine, and SEO category pages.
-- Real `/botines`, `/camisetas`, `/entrenamiento`, or `/accesorios` pages; navigation uses `/catalogo` query filters.
+
+- Cart persistence across reloads, browser sessions, devices, or authenticated accounts.
+- Checkout, orders, shipping, Mercado Pago or other payments.
+- Supabase Auth, customer accounts, admin authorization, product admin, uploads, and promotion engine.
+- Real `/botines`, `/camisetas`, `/entrenamiento`, or `/accesorios` pages; navigation continues to use `/catalogo` query filters.
 
 ## Capabilities
 
 ### New Capabilities
-- `catalog-products-domain`: Product, variant, category, brand, image, pricing, publication, and MVP/V2 rules.
-- `products-public-api`: Future public read-only list, filter, detail, featured, category, and brand contracts.
+
+- `catalog-products-domain`: Product, variant, category, brand, image, pricing, publication, and stock rules.
+- `products-public-api`: Public read-only list, filter, detail, featured, category, and brand contracts.
 - `catalog-ui`: Catalog route, filters, responsive grid, editorial categories, and empty state.
-- `product-detail-ui`: Detail route, gallery, brand/category context, variant selector, and mock cart CTA behavior.
+- `product-detail-ui`: Detail route, gallery, product context, variant selection, and validated add-to-cart intent.
+- `cart`: Local/session-only line management, quantity/stock rules, totals, header count, and empty state.
 
 ### Modified Capabilities
-- None; `openspec/specs/` is empty.
+
+- None; these capabilities are introduced by this active change.
 
 ## Approach
 
-Use a UI-first, mock-first plan. Split specs by domain, API, catalog UI, and detail UI so the first slice ships visual routes with typed local data while preserving upgrade paths for Prisma, APIs, stock validation, cart, and checkout.
+Deliver the change in explicit slices:
+
+1. Validate catalog/detail UX against typed local fixtures.
+2. Add Prisma/PostgreSQL persistence and repeatable seed data.
+3. Expose stable public read APIs.
+4. Move catalog/detail UI to those APIs without changing user-facing contracts.
+5. Add a client-side cart provider and route while keeping checkout and persistence deferred.
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `openspec/specs/catalog-products-domain/spec.md` | New | Future catalog entity/rule spec. |
-| `openspec/specs/products-public-api/spec.md` | New | Future public read API spec. |
-| `openspec/specs/catalog-ui/spec.md` | New | Future catalog browsing spec. |
-| `openspec/specs/product-detail-ui/spec.md` | New | Future product detail spec. |
-| `src/lib/catalog/*` | Planned | Future local mock data/filter helpers. |
-| `src/app/catalogo/page.tsx` | Planned | Future catalog screen. |
-| `src/app/productos/[slug]/page.tsx` | Planned | Future detail screen. |
+| Area | Impact |
+|---|---|
+| `prisma/*`, `src/lib/catalog/*` | Catalog persistence, seed, contracts, and read repository |
+| `src/app/api/catalog/*` | Public read-only catalog endpoints |
+| `src/app/catalogo/*`, `src/app/productos/*`, `src/components/catalog/*` | API-backed catalog and detail UI |
+| `src/lib/cart/*`, `src/components/cart/*`, `src/app/carrito/*` | Local cart state and presentation |
+| `src/app/layout.tsx`, `src/components/layout/header.tsx` | Cart provider and header count integration |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Backend overbuild | Medium | Keep first slice UI-only with local data. |
-| Ambiguous variant rules | Medium | Separate MVP simplifications from V2 stock/image validation. |
-| Weak fictional branding | Low | Use consistent proprietary brands and examples. |
-
-## Rollback Plan
-
-Revert `openspec/changes/catalog-products/proposal.md` and the Engram artifact. No runtime files are changed.
-
-## Dependencies
-
-- Next.js App Router storefront conventions and hybrid SDD setup.
+| Risk | Mitigation |
+|---|---|
+| Client cart exceeds live stock | Carry selected-variant stock into cart lines and enforce the bound on add/increment. |
+| Session-only cart is mistaken for durable state | Explicitly exclude persistence and communicate the boundary in UI and specs. |
+| API/UI contract drift | Preserve public DTOs and verify list/detail scenarios against runtime data. |
 
 ## Success Criteria
 
-- [ ] Specs can be created for the four listed capabilities without implementation.
-- [ ] First slice is limited to local typed mock data and visual catalog/detail UI.
-- [ ] Deferred backend, cart, checkout, admin, and payment work is explicit.
-
-
+- [x] Catalog persistence, public read APIs, and API-backed catalog/detail UI are delivered.
+- [x] A local session-only cart supports selection, equivalent-line consolidation, quantity changes, removal, totals, header count, and empty state.
+- [x] Cart quantity cannot exceed the selected variant's available stock.
+- [x] Checkout, payment, auth, and admin behavior remain outside the delivered scope.

@@ -1,84 +1,61 @@
-﻿# Design: Catalog Products First UI Slice
+# Design: Catalog Products Through Local Cart
 
 ## Technical Approach
 
-Build the first slice as a Next.js App Router, UI-first catalog backed only by local typed mock data under `src/lib/catalog`. The runtime UI will use `/catalogo` for browsing and `/productos/[slug]` for detail, matching the specs while preserving the current storefront style: server-rendered route components, `@/*` imports, Tailwind v4 tokens, shadcn-style `Button`, and feature components under `src/components`.
+The delivered architecture progresses from the original typed-fixture UI slice to PostgreSQL-backed public catalog reads and a client-only cart. Server-rendered catalog routes consume stable public API contracts; a root cart provider owns ephemeral line state for the current page session. Checkout, payments, authentication, and cart persistence remain separate future boundaries.
 
 ## Architecture Decisions
 
-| Decision | Choice | Tradeoff / Rationale |
+| Decision | Choice | Rationale |
 |---|---|---|
-| Data source | Local typed mock catalog in `src/lib/catalog/*` | Fastest way to validate UX and domain rules without Prisma/API overbuild. Later migration can replace query helpers with API calls. |
-| Routing | Real routes are `/catalogo` and `/productos/[slug]` only | Aligns with specs; no `/botines` etc. SEO category pages remain deferred. |
-| Component split | Route pages compose catalog/detail components; reusable cards and filters live in `src/components/catalog` | Keeps App Router pages thin and follows current `src/components/home` organization. |
-| Interactivity | Keep first slice mostly server-rendered; use a small client component only if variant/gallery state requires it | Minimizes hydration cost, but allows detail interactions that cannot be represented statically. |
-| Boundaries | No Prisma, Route Handlers, Server Actions, cart state, checkout, payments, or admin CRUD | Prevents coupling UI validation to backend decisions that specs explicitly defer. |
-
-## Proposed Folder Structure
-
-| Planned path | Action | Purpose |
-|---|---|---|
-| `src/lib/catalog/types.ts` | Create later | Catalog domain UI types. |
-| `src/lib/catalog/mock-data.ts` | Create later | Proprietary categories, brands, products, variants, images. |
-| `src/lib/catalog/queries.ts` | Create later | Pure helpers: list/filter/find/featured. |
-| `src/app/catalogo/page.tsx` | Create later | Catalog route reading `searchParams`. |
-| `src/app/productos/[slug]/page.tsx` | Create later | Product detail route and not-found handling. |
-| `src/components/catalog/*` | Create later | Product card, filters, grid, empty state, gallery, variant selector, mock cart CTA. |
-| `src/components/layout/header.tsx`, `src/components/home/home-data.ts` | Modify later | Replace existing `/products`, `/categories`, `/featured` links with `/catalogo` query links. |
+| Catalog source | Prisma/PostgreSQL behind `src/app/api/catalog/*` and `src/lib/catalog/prisma-public-repository.ts` | Keeps visibility/filter rules server-side while exposing Prisma-independent DTOs. |
+| UI integration | `/catalogo` and `/productos/[slug]` consume public catalog contracts | Preserves the Slice 1 component/route contract while replacing mock reads. |
+| Cart ownership | `CartProvider` in `src/lib/cart/cart-provider.tsx`, mounted by `src/app/layout.tsx` | Shares cart state between product detail, header, and `/carrito` without introducing a backend. |
+| Line identity | Deterministic `productId:variantId`; variantless products use `productId:product` | Equivalent selections consolidate; different variants remain separate lines. |
+| Quantity semantics | Add/increment changes quantity by one, decrement changes it by one, and `Remove` deletes the complete line | Provides predictable controls and an explicit full-line removal action. |
+| Stock bound | Store the selected variant's available stock on the cart selection and reject/cap additions or increments beyond it | Implemented in cart-state transitions and provider delegation; the CTA passes selected stock and the cart disables increment at the known bound. |
+| Deferred boundaries | No local storage, cookies, database cart, checkout, orders, payment, or auth coupling | Keeps Phase 5 session-only and prevents premature commercial-state design. |
 
 ## Data Flow
 
 ```text
-/catalogo?category=botines&brand=norte-fc
-  -> catalog page parses searchParams
-  -> listCatalogProducts(filters)
-  -> CatalogFilters + CatalogGrid + ProductCard
-  -> ProductCard links to /productos/{slug}
-
-/productos/[slug]
-  -> findProductBySlug(slug)
-  -> notFound/unavailable state if absent or inactive
-  -> ProductGallery + ProductInfo + VariantSelector + disabled MockCartCTA
+PostgreSQL -> public catalog repository -> /api/catalog/*
+    -> /catalogo and /productos/[slug]
+    -> variant selection -> addItem(product + variant + stock)
+    -> CartProvider -> Header count + /carrito lines and totals
 ```
 
-## Interfaces / Contracts
+Product detail MUST require a variant selection when active variants exist and MUST reject an out-of-stock selection. `addItem` derives line identity from product plus variant. An equivalent add increments the existing line only when the stock bound allows it. `setQuantity` applies the same bound; a quantity below one removes the line. `removeItem` always removes the full matching line.
 
-Minimal shape only; implementation details stay in future tasks.
+`itemCount` is the sum of line quantities. `total` is the sum of unit price multiplied by quantity. Both are derived from provider state rather than stored separately. Empty provider state renders the cart empty state and catalog return path.
 
-```ts
-type CatalogProduct = {
-  id: string; slug: string; name: string; description: string;
-  categorySlug: string; brandSlug: string;
-  price: number; compareAtPrice: number | null;
-  featured: boolean; isActive: boolean;
-  images: ProductImage[]; variants: ProductVariant[];
-};
-```
+## Concrete File Boundaries
 
-Mock data MUST use ARS numeric pricing, exactly one primary image per product, required alt text, fictional/proprietary brands only, flat MVP categories (`botines`, `camisetas`, `entrenamiento`, `accesorios`), and inactive products excluded by query helpers.
-
-## Main Components
-
-- `CatalogFilters`: category, brand, featured controls; desktop sidebar and compact mobile panel/accordion.
-- `CatalogTopBar`: result context and disabled/planned sort affordance.
-- `ProductGrid` / `ProductCard`: responsive cards optimized for summaries.
-- `CatalogEmptyState`: explains no matches and links back to `/catalogo`.
-- `ProductGallery`: ordered images with primary image first.
-- `VariantSelector`: size/color/stock/price override presentation.
-- `MockCartCTA`: disabled or mock feedback only; no cart state.
+| Path | Responsibility |
+|---|---|
+| `src/lib/catalog/public-contracts.ts` | Public product and active-variant DTOs |
+| `src/app/api/catalog/*` | Read-only catalog HTTP routes |
+| `src/components/catalog/product-detail-api-content.tsx` | Selected-variant state |
+| `src/components/catalog/mock-cart-cta.tsx` | Validated add intent (legacy filename) |
+| `src/lib/cart/types.ts` | Cart selection and line contracts, including stock bound |
+| `src/lib/cart/cart-provider.tsx` | Local line mutations and derived totals/count |
+| `src/components/cart/cart-content.tsx` | Empty state, lines, quantity controls, removal, totals |
+| `src/components/layout/header.tsx` | Cart route link and derived item count |
 
 ## Testing Strategy
 
-No test runner exists. For the first slice, use `pnpm lint`, `pnpm exec tsc --noEmit`, and manual review against the four specs. When tests are added, cover pure query helpers as unit tests, route rendering/filter behavior as integration tests, and catalog-to-detail navigation as E2E.
+Runtime tests SHOULD mount the provider with product-detail, header, and cart consumers. Scenarios MUST cover: required variant selection; variantless add; equivalent-line consolidation; distinct variants; increment/decrement; decrement from one; full-line removal; totals; header count; empty state; out-of-stock rejection; and attempts to exceed selected-variant stock. Reload behavior SHOULD confirm that cart state is not persisted. Checkout and payment affordances MUST remain absent or explicitly deferred.
+
+Static validation remains lint, TypeScript, and production build. These checks do not replace runtime assertions for state transitions.
+
+## Threat Matrix
+
+N/A — this design adds no shell, subprocess, VCS/PR automation, executable classification, or process-integration boundary.
 
 ## Migration / Rollout
 
-1. Ship typed local mock data and UI routes.
-2. Add Prisma/domain schema and seed using the same type vocabulary.
-3. Add read-only public APIs: products, product detail, categories, brands, featured products.
-4. Replace local query helpers with API-backed data access while preserving component contracts.
-5. Add cart/checkout only after product/variant/stock behavior is validated.
+No data migration is required for cart state. Phase 5 stock-bound behavior is verified by the external runtime matrix: zero-stock selection is disabled, equivalent selections consolidate at quantity two, known-stock increments cap at three, and reload resets session state. Future checkout work must consume a separately validated server-side cart/order boundary rather than assuming client totals are authoritative.
 
 ## Open Questions
 
-None blocking.
+None blocking for the stock-bound correction.

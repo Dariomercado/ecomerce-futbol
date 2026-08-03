@@ -1,61 +1,47 @@
-# Design: Catalog Products Through Local Cart
+# Design: Catalog Products Through Guest Checkout
 
 ## Technical Approach
 
-The delivered architecture progresses from the original typed-fixture UI slice to PostgreSQL-backed public catalog reads and a client-only cart. Server-rendered catalog routes consume stable public API contracts; a root cart provider owns ephemeral line state for the current page session. Checkout, payments, authentication, and cart persistence remain separate future boundaries.
+Slices 1-5 retain the typed catalog UI, Prisma/PostgreSQL public catalog reads, API-backed catalog/detail routes, and the session-only `CartProvider`. Slice 6.1 adds guest contact and shipping capture plus a server-only local pending-order boundary. The client submits identities and quantities; the server reloads trusted active catalog data and derives all commercial amounts.
 
 ## Architecture Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Catalog source | Prisma/PostgreSQL behind `src/app/api/catalog/*` and `src/lib/catalog/prisma-public-repository.ts` | Keeps visibility/filter rules server-side while exposing Prisma-independent DTOs. |
-| UI integration | `/catalogo` and `/productos/[slug]` consume public catalog contracts | Preserves the Slice 1 component/route contract while replacing mock reads. |
-| Cart ownership | `CartProvider` in `src/lib/cart/cart-provider.tsx`, mounted by `src/app/layout.tsx` | Shares cart state between product detail, header, and `/carrito` without introducing a backend. |
-| Line identity | Deterministic `productId:variantId`; variantless products use `productId:product` | Equivalent selections consolidate; different variants remain separate lines. |
-| Quantity semantics | Add/increment changes quantity by one, decrement changes it by one, and `Remove` deletes the complete line | Provides predictable controls and an explicit full-line removal action. |
-| Stock bound | Store the selected variant's available stock on the cart selection and reject/cap additions or increments beyond it | Implemented in cart-state transitions and provider delegation; the CTA passes selected stock and the cart disables increment at the known bound. |
-| Deferred boundaries | No local storage, cookies, database cart, checkout, orders, payment, or auth coupling | Keeps Phase 5 session-only and prevents premature commercial-state design. |
+| Catalog source | Prisma/PostgreSQL behind public catalog routes and DTOs | Keeps publication, active-variant, and visibility rules on the server. |
+| Cart ownership | `CartProvider` shares current-session lines between detail, header, and `/carrito` | Preserves Slice 5 line identity, stock limits, derived count, and derived display total without persistence. |
+| Guest access | Checkout accepts contact and shipping without authentication; `userId` remains nullable | Supports guests now and leaves a future trusted identity reference optional. |
+| Commercial authority | The order service reloads active products and variants, consolidates duplicate lines, validates aggregate stock, and derives unit prices, line totals, and total | Client totals are ignored and malformed or unsafe quantities cannot produce an order. |
+| Pending result | Return an in-memory `PENDING_CONFIRMATION` order | Gives the shopper a local confirmation boundary without durable order state or payment side effects. |
+| Failure behavior | Invalid or unavailable catalog input uses stable recoverable validation responses; unexpected route failures are sanitized; the page handles fetch and JSON failures | Supports safe retry and correction without exposing internals. |
 
 ## Data Flow
 
 ```text
-PostgreSQL -> public catalog repository -> /api/catalog/*
-    -> /catalogo and /productos/[slug]
-    -> variant selection -> addItem(product + variant + stock)
-    -> CartProvider -> Header count + /carrito lines and totals
+Cart lines + guest contact/shipping
+  -> /api/checkout/orders
+  -> input validation and duplicate aggregation
+  -> Prisma reload of active product, variant, and stock
+  -> server-derived lines and total
+  -> local PENDING_CONFIRMATION response
 ```
 
-Product detail MUST require a variant selection when active variants exist and MUST reject an out-of-stock selection. `addItem` derives line identity from product plus variant. An equivalent add increments the existing line only when the stock bound allows it. `setQuantity` applies the same bound; a quantity below one removes the line. `removeItem` always removes the full matching line.
-
-`itemCount` is the sum of line quantities. `total` is the sum of unit price multiplied by quantity. Both are derived from provider state rather than stored separately. Empty provider state renders the cart empty state and catalog return path.
+The `/checkout` form submits only product/variant identities and quantities with guest contact and shipping. It may display a client total, but that value is never trusted. The service rejects malformed JSON shapes, empty or invalid lines, unavailable products or variants, missing required variants, aggregate quantity above stock, and unsafe numeric results. It has no auth requirement and returns `userId: null` at this boundary.
 
 ## Concrete File Boundaries
 
 | Path | Responsibility |
 |---|---|
-| `src/lib/catalog/public-contracts.ts` | Public product and active-variant DTOs |
-| `src/app/api/catalog/*` | Read-only catalog HTTP routes |
-| `src/components/catalog/product-detail-api-content.tsx` | Selected-variant state |
-| `src/components/catalog/mock-cart-cta.tsx` | Validated add intent (legacy filename) |
-| `src/lib/cart/types.ts` | Cart selection and line contracts, including stock bound |
-| `src/lib/cart/cart-provider.tsx` | Local line mutations and derived totals/count |
-| `src/components/cart/cart-content.tsx` | Empty state, lines, quantity controls, removal, totals |
-| `src/components/layout/header.tsx` | Cart route link and derived item count |
+| `src/app/checkout/page.tsx` | Guest form, cart handoff, pending confirmation, and fetch/JSON recovery message. |
+| `src/app/api/checkout/orders/route.ts` | JSON parsing, stable validation mapping, and sanitized unexpected failures. |
+| `src/lib/checkout/contracts.ts` | Guest request, validation, and local pending-order contracts. |
+| `src/lib/checkout/guest-order-service.ts` | Validation, aggregate stock checks, trusted catalog reload, and safe server arithmetic. |
+| `src/components/cart/cart-content.tsx` | Checkout navigation from the local cart summary. |
 
-## Testing Strategy
+## Verification
 
-Runtime tests SHOULD mount the provider with product-detail, header, and cart consumers. Scenarios MUST cover: required variant selection; variantless add; equivalent-line consolidation; distinct variants; increment/decrement; decrement from one; full-line removal; totals; header count; empty state; out-of-stock rejection; and attempts to exceed selected-variant stock. Reload behavior SHOULD confirm that cart state is not persisted. Checkout and payment affordances MUST remain absent or explicitly deferred.
+Run direct ESLint, TypeScript no-emit, `git diff --check`, and the focused harness for guest/no-auth checkout, server-authoritative totals, malformed input, aggregate stock, unavailable catalog, sanitized errors, safe arithmetic, and UI recovery.
 
-Static validation remains lint, TypeScript, and production build. These checks do not replace runtime assertions for state transitions.
+## Deferred Scope
 
-## Threat Matrix
-
-N/A — this design adds no shell, subprocess, VCS/PR automation, executable classification, or process-integration boundary.
-
-## Migration / Rollout
-
-No data migration is required for cart state. Phase 5 stock-bound behavior is verified by the external runtime matrix: zero-stock selection is disabled, equivalent selections consolidate at quantity two, known-stock increments cap at three, and reload resets session state. Future checkout work must consume a separately validated server-side cart/order boundary rather than assuming client totals are authoritative.
-
-## Open Questions
-
-None blocking for the stock-bound correction.
+Payment integration, durable order persistence, authentication integration, and administration are deferred. No migration is required.

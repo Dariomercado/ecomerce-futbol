@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 1 through 5 are complete. Phase 5 delivers a local, session-only cart with selected-variant stock bounds verified by the external runtime matrix. Local PostgreSQL, the initial catalog migration, repeatable seed data, the public read-only catalog API, and API-backed home/catalog/detail UI are complete. Guest checkout, payments, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 31/37 tasks complete, with 6 pending.
+Phases 1 through 5 are complete. Phase 5 delivers a local, session-only cart with selected-variant stock bounds verified by the external runtime matrix. Local PostgreSQL, the initial catalog migration, repeatable seed data, the public read-only catalog API, and API-backed home/catalog/detail UI are complete. Guest checkout task 6.1 is complete; payment, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 32/37 tasks complete, with 5 pending.
 
 Recent commit evidence:
 
@@ -39,7 +39,7 @@ Chain strategy: stacked-to-main
 | 4A | Home API-backed | PR4 | Complete; home consumes featured-products API and preserves its UI contract. |
 | 4B | Catalog and detail API-backed | PR4 | Complete; list/detail UI consumes public APIs while preserving Slice 1 component contracts. |
 | 5 | Cart | PR5 | Complete: local/session-only cart with selected-variant stock bounds verified by the external runtime matrix. |
-| 6 | Guest checkout + Mercado Pago | PR6 | Pending payment flow after cart; authentication must remain optional. |
+| 6 | Guest checkout + Mercado Pago | PR6 | In progress: 6.1 guest checkout is complete; 6.2 payment work remains pending. Authentication remains optional. |
 | 7 | Supabase Auth | PR7 | Pending optional customer identity and required admin identity; no catalog/commercial data migration. |
 | 8 | Product admin | PR8 | Pending admin CRUD with authenticated authorization, separated from public API. |
 
@@ -136,9 +136,9 @@ Status: complete. The local, session-only cart supports real product and variant
 
 ## Phase 6: Slice 6 - Guest checkout + Mercado Pago
 
-Status: pending. There is no checkout or Mercado Pago integration yet.
+Status: in progress. Guest checkout/order boundaries are complete; Mercado Pago remains unimplemented.
 
-- [ ] 6.1 Add `src/app/checkout/page.tsx`, `src/lib/checkout/*`, and checkout/order API boundaries that accept guest contact and shipping data. An order may store a nullable reference to an authenticated Supabase user, but authentication must never be required to place an order.
+- [x] 6.1 Add `src/app/checkout/page.tsx`, `src/lib/checkout/*`, and checkout/order API boundaries that accept guest contact and shipping data. An order may store a nullable reference to an authenticated Supabase user, but authentication must never be required to place an order.
 - [ ] 6.2 Add `src/lib/payments/*` Mercado Pago boundaries after approved config; verify totals and failure recovery.
 
 ## Phase 7: Slice 7 - Supabase Auth

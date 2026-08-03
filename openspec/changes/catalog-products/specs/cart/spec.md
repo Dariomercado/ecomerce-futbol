@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the local, session-only cart delivered before checkout, payment, authentication, or durable persistence.
+Define the local, session-only cart and its handoff to a guest checkout/order boundary. Payment processing, authentication, and durable persistence remain deferred.
 
 ## Requirements
 
@@ -84,14 +84,28 @@ The cart MUST derive header count from the sum of all line quantities and total 
 
 ### Requirement: Session-only boundary
 
-Cart state MUST remain client-local for the current page session. It MUST NOT be persisted to browser storage, cookies, a server, or a database, and MUST NOT provide checkout or payment behavior.
+Cart state MUST remain client-local for the current page session. It MUST NOT be persisted to browser storage, cookies, a server, or a database. It MAY hand its product/variant identities and quantities to the guest checkout boundary, but MUST NOT initiate payment processing.
 
 #### Scenario: Page session reloads
 - GIVEN the cart contains lines
 - WHEN a fresh page session is created
 - THEN the cart MUST start empty
 
-#### Scenario: Checkout is unavailable
+#### Scenario: Guest checkout handoff is available
 - GIVEN the cart contains lines
 - WHEN the cart summary renders
-- THEN checkout and payment actions MUST NOT be available
+- THEN a checkout action MAY hand the lines to `/checkout`, and no payment action MUST be available
+
+### Requirement: Guest checkout order boundary
+
+The checkout boundary MUST accept guest contact and shipping data without requiring authentication. It MAY keep a nullable authenticated user reference when one is supplied by a future trusted identity boundary. The server MUST derive product prices, line totals, and order total from active trusted catalog and variant data, not client-submitted totals, and MUST return a local pending confirmation without payment processing or durable order persistence.
+
+#### Scenario: Guest order is submitted
+- GIVEN a guest supplies valid contact and shipping data with eligible cart lines
+- WHEN `/api/checkout/orders` receives the request
+- THEN it MUST accept the request without authentication and return a local pending confirmation with a nullable user reference
+
+#### Scenario: Client total is tampered
+- GIVEN a checkout request includes a client total that differs from catalog prices
+- WHEN `/api/checkout/orders` builds the local order
+- THEN the returned total MUST be derived from trusted catalog and variant prices

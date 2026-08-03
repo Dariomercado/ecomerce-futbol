@@ -16,6 +16,7 @@
 - [x] 5.1 Add cart types/state under `src/lib/cart/` for product and variant selections.
 - [x] 5.2 Add cart UI, `/carrito`, and real cart behavior for `MockCartCTA`.
 - [x] 5.3 Carry selected-variant stock into cart lines and prevent add/increment operations from exceeding that bound.
+- [x] 6.1 Add guest checkout contact/shipping and a server-verified local pending-order boundary without auth.
 
 ## Work Unit Evidence: 3E
 
@@ -67,4 +68,21 @@ Catalog uses client Route Handler fetches for interactive states; the detail Ser
 
 ## Remaining Work
 
-6 of 37 tasks remain, beginning with Slice 6 guest checkout and Mercado Pago.
+5 of 37 tasks remain. Phase 6 is in progress: 6.1 is complete and 6.2 Mercado Pago remains pending.
+
+## Work Unit Evidence: 6.1
+
+| Evidence | Result |
+|---|---|
+| Focused validation | `pnpm.cmd lint`, `.\node_modules\.bin\tsc.CMD --noEmit --incremental false`, and `git diff --check` each exited `0`. No automated test runner is configured. |
+| Runtime harness | Existing local Next server at `http://127.0.0.1:3000`: `POST /api/checkout/orders` with valid guest contact/shipping data and no lines returned `400 INVALID_CHECKOUT` with `At least one item is required.` The checkout route returned `200`. This verifies the unauthenticated API boundary parses guest input and rejects an invalid order before commercial lookup. |
+| Rollback boundary | Revert `src/app/checkout/`, `src/app/api/checkout/`, `src/lib/checkout/`, and the checkout link/copy in `src/components/cart/cart-content.tsx`; this removes guest checkout boundary behavior without touching cart state, catalog APIs, auth, persistence, or payments. |
+## Work Unit Evidence: 6.1 Corrective Reconciliation (v2)
+
+| Evidence | Result |
+|---|---|
+| Planning contract | Guest contact/shipping, a nullable unauthenticated user reference, trusted server-side catalog totals, and local pending confirmation are in scope. Payment processing remains deferred. |
+| Corrected behaviors | Runtime JSON shape validation; duplicate-line aggregation before stock validation; sanitized route failures; safe quantities and total arithmetic; stable unavailable-catalog 400 contract; and shopper-visible fetch/JSON recovery are covered by the v2 focused harness. |
+| Authored delta | 295 additions, 53 deletions, 348 total |
+| Focused validation | Direct installed ESLint, TypeScript no-emit, `git diff --check`, and the focused v2 correction harness are recorded in the v2 controls directory. |
+| Rollback boundary | Revert only the Slice 6.1 checkout route, page, contracts, service, cart checkout link, and its planning/progress documentation. Catalog, cart state, payment, persistence, authentication, and admin boundaries remain unaffected. |

@@ -1,174 +1,50 @@
 # Tasks: Catalog Products
 
-## Current status
-
-Phases 1 through 5 are complete. Phase 5 delivers a local, session-only cart with selected-variant stock bounds verified by the external runtime matrix. Local PostgreSQL, the initial catalog migration, repeatable seed data, the public read-only catalog API, and API-backed home/catalog/detail UI are complete. Guest checkout task 6.1 is complete; payment, Supabase Auth, authenticated admin authorization, and automated tests remain pending. Current progress is 32/37 tasks complete, with 5 pending.
-
-Recent commit evidence:
-
-- `d8bcf7b` `fix(catalog): update remaining home catalog links`
-- `69e39f4` `feat(catalog): wire catalog navigation`
-- `ccf0f3e` `feat(catalog): add product detail mock page`
-- `007f68a` `feat(catalog): add catalog page with mock filters`
-- `4ceae80` `feat(catalog): add product card grid components`
+## Completed history
+Slices 1-6.1 and 6.2A/6.2B are complete. This is a narrow, compatibility foundation amendment; their approved logical guarantees remain unchanged.
 
 ## Review Workload Forecast
-
 | Field | Value |
-|-------|-------|
-| Estimated changed lines | 1600-2400 |
-| 400-line budget risk | High |
-| Chained PRs recommended | Yes |
-| Suggested split | PR1 Slice 1 -> PR2 Slice 2 -> PR3 Slice 3 -> PR4 Slice 4 -> PR5 Slice 5 -> PR6 Slice 6 -> PR7 Slice 7 -> PR8 Slice 8 |
-| Delivery strategy | ask-on-risk (resolved) |
-| Chain strategy | stacked-to-main |
+|---|---|
+| Estimated changed lines | 1,650-2,150 |
+| Delivery strategy | ask-on-risk |
+| Suggested split | 6.2A -> 6.2B -> bridge foundation -> 6.2C -> 6.2D |
 
 Decision needed before apply: No
 Chained PRs recommended: Yes
-Chain strategy: stacked-to-main
+Chain strategy: feature-branch-chain
 400-line budget risk: High
 
 ### Suggested Work Units
+| Unit | Goal | Likely PR/base | Focused test command | Runtime harness | Rollback boundary |
+|---|---|---|---|---|---|
+| 6.2A | Complete foundation | PR1/tracker | `pnpm test:checkout` | local Prisma migration | A paths |
+| 6.2B | Provider core | PR2/PR1 | `pnpm test:checkout` | timeout fake | payment core |
+| Bridge | Durable compatibility | PR3/PR2 | `pnpm test -- src/lib/checkout/order-repository.test.ts src/lib/payments/webhook.test.ts src/lib/payments/service.test.ts` | local migration + fake authenticated GET | migration/repository/gateway; retain after dispatch |
+| 6.2C | API/webhook/recovery | PR4/PR3 | `pnpm test:checkout` | signed webhook fake | API/recovery; depends Bridge |
+| 6.2D | CardForm/3DS | PR5/PR4 | `pnpm test:checkout` | sandbox CardForm/3DS | UI/dispatch; retain reconciliation |
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | Mock catalog/detail UI | PR1 | Completed and committed; no Prisma/API/cart/checkout/admin. |
-| 2A.3 | Local PostgreSQL infrastructure + initial migration | PR2 | Docker Compose and `DATABASE_URL` template are in place; the initial migration is generated and applied locally. No seed/API/UI/cart/checkout/admin. |
-| 2B | Product seed | PR2 | Complete and validated with natural-key upserts, fixture-scoped counts, and repeatable seed execution. |
-| 3 | Public read API | PR3 | Complete through Work Unit 3E; final commit `62bc8ec`. |
-| 4A | Home API-backed | PR4 | Complete; home consumes featured-products API and preserves its UI contract. |
-| 4B | Catalog and detail API-backed | PR4 | Complete; list/detail UI consumes public APIs while preserving Slice 1 component contracts. |
-| 5 | Cart | PR5 | Complete: local/session-only cart with selected-variant stock bounds verified by the external runtime matrix. |
-| 6 | Guest checkout + Mercado Pago | PR6 | In progress: 6.1 guest checkout is complete; 6.2 payment work remains pending. Authentication remains optional. |
-| 7 | Supabase Auth | PR7 | Pending optional customer identity and required admin identity; no catalog/commercial data migration. |
-| 8 | Product admin | PR8 | Pending admin CRUD with authenticated authorization, separated from public API. |
+## Phase 6: Slice 6.2 Payments (TDD)
+- [x] 6.2A.1 SETUP: dependencies, checkout test script, Vitest config.
+- [x] 6.2A.2 RED: schema/reservation invariants.
+- [x] 6.2A.3 GREEN/REFACTOR: initial schema/migration.
+- [x] 6.2A.4 RED: contracts/repository, capability hash, raw-card rejection.
+- [x] 6.2A.5 GREEN/REFACTOR: checkout contracts/service/repository.
+- [x] 6.2B.1 RED: rail/flag/redaction and monotonic state.
+- [x] 6.2B.2 GREEN/REFACTOR: payment contracts/config/state machine.
+- [x] 6.2B.3 RED: UUID/CAS replay, crash/timeout, reservation effects.
+- [x] 6.2B.4 GREEN/REFACTOR: Mercado Pago gateway/service.
+- [x] Bridge.1 RED: add `order-repository.test.ts` and `webhook.test.ts` for composite receipt uniqueness, concurrent claim, stale lease/retry, bounded `(nextReconcileAt,id)` selection, atomic evidence/receipt/reservation changes.
+- [x] Bridge.2 GREEN: extend `prisma/schema.prisma` and create `prisma/migrations/20260805_checkout_reconciliation_foundation/migration.sql` for durable order/attempt evidence, `WebhookReceipt` composite identity/state/lease/counter; no pruning.
+- [x] Bridge.3 GREEN: extend `src/lib/checkout/order-repository.ts` transactional order/attempt reads/updates, receipt claim/complete, reservation consume/release, bounded candidate leases.
+- [x] Bridge.4 RED/GREEN: extend `src/lib/payments/{contracts,mercado-pago-orders-gateway,service}.ts` with server-only `getOrder`; test outside-transaction lookup plus invalid, missing, and external-reference-mismatched evidence remains pending.
+- [ ] 6.2C.1 RED/GREEN: `checkout-routes.test.ts`; implement config, create, and status routes under `src/app/api/checkout/**`.
+- [ ] 6.2C.2 RED/GREEN: test/implement payment submit at `src/app/api/checkout/orders/[orderId]/payment/route.ts`.
+- [ ] 6.2C.3 RED/GREEN: test/implement signed HMAC receipt ACK/dedupe in `src/lib/payments/webhook.ts` and `src/app/api/webhooks/mercado-pago/route.ts`.
+- [ ] 6.2C.4 RED/GREEN: test/implement bounded reconciliation at `src/app/api/internal/payments/reconcile/route.ts`; lookup is outside the transaction.
+- [ ] 6.2D.1 RED/GREEN: `mercado-pago-card-form.test.tsx` and `mercado-pago-card-form.tsx` token/no-network/PAN-CVV boundary.
+- [ ] 6.2D.2 RED/GREEN: 3DS URL/origin/message/close/expiry in CardForm and `src/app/checkout/page.tsx`.
+- [ ] 6.2D.3 Verify checkout tests, typecheck, lint, sandbox/production, and dispatch-disable evidence.
 
-## Phase 1: Slice 1 - Catalog UI with local mock data + Product Detail UI with local mock data
-
-- [x] 1.1 Create `src/lib/catalog/types.ts`, `mock-data.ts`, and `queries.ts` with ARS prices, proprietary brands, flat categories, variants, images, and inactive filtering.
-- [x] 1.2 Create `src/app/catalogo/page.tsx` and `src/components/catalog/{CatalogFilters,CatalogTopBar,ProductGrid,ProductCard,CatalogEmptyState}.tsx`.
-- [x] 1.3 Create `src/app/productos/[slug]/page.tsx` and `src/components/catalog/{ProductGallery,VariantSelector,MockCartCTA}.tsx`.
-- [x] 1.4 Update navigation toward `/catalogo` from the header/home surfaces.
-
-## Phase 2: Slice 2 - Persistence foundation
-
-Status: complete.
-
-### Work Unit 2A.3 - Local PostgreSQL infrastructure + initial migration
-
-- [x] Add `docker-compose.yml` with a `postgres` service using `postgres:16-alpine`.
-- [x] Configure local database `ecomerce_futbol`, user `ecomerce_futbol`, password `ecomerce_futbol_password`, host port `5432`, persistent volume `postgres_data`, and `pg_isready` healthcheck.
-- [x] Document the recommended local `DATABASE_URL` in `.env.example`.
-- [x] Generate and apply the initial catalog migration with `prisma migrate dev`.
-
-Out of scope for Work Unit 2A.3:
-
-- No seed.
-- No API routes.
-- No UI changes.
-- No real cart.
-- No checkout.
-- No admin.
-
-### Work Unit 2B - Product seed
-
-- [x] Add `prisma/seed.ts` with 4 MVP categories, 5 fictional brands, 8 products, 14 SKU-addressable variants, and 10 ordered images.
-- [x] Use natural-key upserts and validate fixture-scoped catalog counts in a transaction.
-- [x] Validate Prisma, generate the client, run the seed twice with identical counts, and pass TypeScript and lint checks.
-
-Size exception: The user explicitly approved Work Unit 2B above the 400-line budget because this atomic seed intentionally mirrors the complete approved fixture: 8 products, 14 variants, and 10 images. This exception applies only to Work Unit 2B.
-
-## Phase 3: Slice 3 - Public read-only API
-
-Status: complete. Work Units 3A through 3E are implemented. Public catalog routes are namespaced under `/api/catalog/*`.
-
-Approved Slice 3 dependency order: 3A -> 3B -> 3C -> 3D -> 3E.
-
-### Work Unit 3A - Prisma singleton + public contracts
-
-- [x] Add the development-safe Prisma singleton in `src/lib/prisma.ts`.
-- [x] Add Prisma-independent public catalog DTOs, normalized list-query types, pagination contracts, and stable validation error types in `src/lib/catalog/public-contracts.ts`.
-
-### Work Unit 3B - Public catalog repository
-
-- [x] Add read-only repository queries and Prisma-to-public-contract mappers.
-- [x] Apply published/active visibility, active variant filtering, ordered images, AND-composed filters, search across name and description, sorting, and pagination.
-- [x] Depends on 3A. No HTTP routes are part of this unit.
-
-### Work Unit 3C - Product list route
-
-- [x] Add `GET /api/catalog/products` with normalized query validation, stable 400 errors, and the `{ data, pagination }` envelope.
-- [x] Support category, brand, minimum/maximum price, sort, search, featured, page, and limit parameters; return `200` with `data: []` when no products match.
-- [x] Depends on 3B.
-
-### Work Unit 3D - Product detail route
-
-- [x] Add `GET /api/catalog/products/[slug]` using the public product-detail contract.
-- [x] Add `GET /api/catalog/categories` and `GET /api/catalog/brands`.
-- [x] Depends on 3C.
-
-### Work Unit 3E - Featured route + cross-endpoint hardening
-
-- [x] Add `GET /api/catalog/featured-products`.
-- [x] Harden validation, stable error behavior, response contracts, and visibility rules consistently across all public catalog endpoints.
-- [x] Depends on 3D.
-
-## Phase 4: Slice 4 - Connect UI to API
-
-Status: complete. Home featured products, catalog listing, and product detail use the public catalog backend.
-
-### Work Unit 4A - Home API-backed
-
-- [x] 4.1 Replace the home featured-products fixture read with `GET /api/catalog/featured-products`, preserving the established home section layout, links, price display, loading/error behavior, and public product visibility contract.
-
-### Work Unit 4B - Catalog listing and product detail API-backed
-
-- [x] 4.2 Replace local reads in `src/app/catalogo/page.tsx` and `src/app/productos/[slug]/page.tsx` with the public products, categories, brands, and product-detail APIs while preserving existing component contracts and URL filter behavior.
-- [x] 4.3 Run focused scenario verification for home featured products, catalog filters, empty results, product not found, sale pricing, gallery ordering, and active variant selection using API data.
-
-## Phase 5: Slice 5 - Cart
-
-Status: complete. The local, session-only cart supports real product and variant selections without checkout or persistence, and selected-variant stock bounds are covered by the external runtime matrix.
-
-- [x] 5.1 Add cart types/state under `src/lib/cart/` for product and variant selections.
-- [x] 5.2 Add `src/components/cart/*`, `src/app/carrito/page.tsx`, and real cart behavior for `MockCartCTA`.
-- [x] 5.3 Carry selected-variant stock into cart lines and prevent add/increment operations from exceeding that bound; add focused runtime coverage for zero-stock and at-stock behavior.
-
-## Phase 6: Slice 6 - Guest checkout + Mercado Pago
-
-Status: in progress. Guest checkout/order boundaries are complete; Mercado Pago remains unimplemented.
-
-- [x] 6.1 Add `src/app/checkout/page.tsx`, `src/lib/checkout/*`, and checkout/order API boundaries that accept guest contact and shipping data. An order may store a nullable reference to an authenticated Supabase user, but authentication must never be required to place an order.
-- [ ] 6.2 Add `src/lib/payments/*` Mercado Pago boundaries after approved config; verify totals and failure recovery.
-
-## Phase 7: Slice 7 - Supabase Auth
-
-Status: pending. Supabase is selected for authentication only and is not configured yet.
-
-- [ ] 7.1 Add Supabase Auth boundaries for optional customer accounts and required admin sign-in. Keep catalog, cart, order, and other commercial data in Prisma + PostgreSQL.
-- [ ] 7.2 Add and verify a distinct application authorization policy for administrative access. A valid Supabase session establishes identity but does not grant an admin role by itself.
-
-## Phase 8: Slice 8 - Product admin
-
-Status: pending. There is no admin surface yet.
-
-- [ ] 8.1 Add `src/app/admin/products/*`, `src/lib/admin/*`, and `src/app/api/admin/products/*` behind the Slice 7 authentication and authorization boundaries.
-- [ ] 8.2 Verify unauthenticated and authenticated-but-unauthorized users cannot perform admin mutations, and keep those mutations separate from public read-only APIs.
-
-## Verification snapshot
-
-Read-only checks confirmed during this documentation sync:
-
-- `src/lib/catalog/` exists with catalog types, mock data, and queries.
-- `src/components/catalog/` exists with catalog grid/card, empty state, gallery, variant selector, and mock cart CTA components.
-- `src/app/catalogo/page.tsx` exists.
-- `src/app/productos/[slug]/page.tsx` exists.
-- `prisma/schema.prisma` exists.
-- Local PostgreSQL infrastructure is defined in `docker-compose.yml`, and the database is healthy.
-- The initial Prisma migration exists at `prisma/migrations/20260615232133_init_catalog_schema/migration.sql` and has been applied locally.
-- `prisma validate` and `prisma generate` passed.
-- `prisma db seed` passed twice with identical counts: 4 categories, 5 brands, 8 products, 14 variants, and 10 images.
-- `tsc --noEmit` and lint passed.
-- `src/lib/catalog/prisma-public-repository.ts` and its public mappers implement the read-only repository layer (`45008c0`).
-- Public catalog list, detail, category, brand, and featured routes exist under `src/app/api/catalog/` (`5e567f7`, `33472b8`, `482b3e3`, `95ff5c7`, `62bc8ec`).
-- Automated tests have not been added for this slice.
+## Exclusions and routing
+6.2D remains excluded from Bridge/6.2C. Apply Bridge first, then 6.2C; after dispatched/pending attempts retain migration, receipts, lookup, and reconciliation until terminal.

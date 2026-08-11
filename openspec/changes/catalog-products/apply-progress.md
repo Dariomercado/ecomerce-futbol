@@ -18,6 +18,24 @@
 - [x] 5.3 Carry selected-variant stock into cart lines and prevent add/increment operations from exceeding that bound.
 - [x] 6.1 Add guest checkout contact/shipping and a server-verified local pending-order boundary without auth.
 
+## Current Reconciled State (post-6.2B)
+
+This section is the current checkpoint. Earlier work-unit counts and routing
+notes remain below as historical evidence and are not the current change state.
+
+| Area | Current state |
+|---|---|
+| 6.2A | Complete |
+| 6.2B | Complete and RDD `APPROVED`; commit `18100af`; receipt `sha256:f3e64bea8a2ae06fe8b01f952ee528258ecf5e22b80fdcb402865b97c7da8173` |
+| Bridge | Complete |
+| 6.2C | Pending: tasks 6.2C.1-6.2C.4 |
+| 6.2D | Pending: tasks 6.2D.1-6.2D.3 |
+| Global change | 13/20 tasks complete; `next: apply` routes the remaining future work |
+
+The seven remaining tasks are exactly 6.2C.1, 6.2C.2, 6.2C.3, 6.2C.4,
+6.2D.1, 6.2D.2, and 6.2D.3. No new implementation or evidence is implied by
+this reconciliation.
+
 ## Work Unit Evidence: 3E
 
 | Evidence | Result |
@@ -66,9 +84,13 @@
 
 Catalog uses client Route Handler fetches for interactive states; the detail Server Component invokes the public detail Route Handler in-process and maps its `404` to `notFound()`.
 
-## Remaining Work
+## Historical Remaining Work (pre-6.2)
 
-5 of 37 tasks remain. Phase 6 is in progress: 6.1 is complete and 6.2 Mercado Pago remains pending.
+The following count is retained as historical evidence from before the payment
+work and is superseded by the current reconciled state above.
+
+5 of 37 tasks remained at that earlier checkpoint; Phase 6 and its payment work
+were not yet recorded there.
 
 ## Work Unit Evidence: 6.1
 
@@ -78,9 +100,11 @@ Catalog uses client Route Handler fetches for interactive states; the detail Ser
 | Runtime harness | Existing local Next server at `http://127.0.0.1:3000`: `POST /api/checkout/orders` with valid guest contact/shipping data and no lines returned `400 INVALID_CHECKOUT` with `At least one item is required.` The checkout route returned `200`. This verifies the unauthenticated API boundary parses guest input and rejects an invalid order before commercial lookup. |
 | Rollback boundary | Revert `src/app/checkout/`, `src/app/api/checkout/`, `src/lib/checkout/`, and the checkout link/copy in `src/components/cart/cart-content.tsx`; this removes guest checkout boundary behavior without touching cart state, catalog APIs, auth, persistence, or payments. |
 
-## Remaining Work
+## Historical Remaining Work (pre-6.2B)
 
-5 of 37 tasks remain. Task 6.2 Mercado Pago boundaries and all later tasks are still pending.
+The following blocked note predates the completed 6.2A, 6.2B, and Bridge work.
+It remains as historical planning evidence, not as the current implementation
+status.
 ## Work Unit Evidence: 6.1 Corrective Reconciliation
 
 | Evidence | Result |
@@ -137,7 +161,9 @@ All pre-existing non-6.2B source and planning hashes matched after implementatio
 None. The implementation uses a fetch-injected Orders adapter rather than a live SDK call so tests remain deterministic and no credentials are needed. The real submit/status routes, authoritative `Order.get` replay reconciliation, webhooks, and UI remain intentionally deferred to 6.2C/6.2D.
 
 ### Routing
-9 Slice 6.2 tasks remain. The next phase is `sdd-apply` for 6.2C, not final verification.
+Historical routing recorded 9 Slice 6.2 tasks remaining and recommended
+`sdd-apply` for 6.2C. The current global ledger is 13/20 complete with the
+seven 6.2C/6.2D tasks listed in the current reconciled state above.
 
 ## Work Unit Evidence: 6.2B Corrective Rerun
 
@@ -330,9 +356,9 @@ None. The implementation uses a fetch-injected Orders adapter rather than a live
 - Baseline manifest: `%TEMP%\catalog-products-bridge-preservation-before.tsv`; 120 non-authorized paths; SHA-256 `AEDED8CA1F5E234AF3479591FEE39DBD9332EA6086E1924AD97EA116B9D64B8D`.
 - Post-edit manifest had exactly one non-authorized discrepancy: ignored generated `tsconfig.tsbuildinfo` changed during `tsc --noEmit`; its original untracked cache was not recoverable from Git. No source, configuration, planning, or tracked non-authorized path changed. No branch, commit, push, PR, or review transaction occurred.
 
-### Remaining Work
+### Current Remaining Work
 - [ ] 6.2C.1-6.2C.4 API/webhook/recovery (PR4, depends on Bridge).
-- [ ] 6.2D.1-6.2D.3 CardForm/3DS/UI.
+- [ ] 6.2D.1-6.2D.3 CardForm/3DS/UI (after 6.2C).
 
 ```json
 {

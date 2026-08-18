@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 
+export const dynamic = "force-static";
+
 export default function NotFound() {
   return (
     <section className="flex min-h-[calc(100dvh-8rem)] items-center justify-center bg-surface/60 px-4 py-20 text-center sm:px-6 lg:px-8">

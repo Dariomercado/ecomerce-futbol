@@ -50,6 +50,8 @@
 }
 
 :root {
+  --font-inter: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sora: "Trebuchet MS", "Segoe UI", ui-sans-serif, sans-serif;
   --background: #ffffff;
   --foreground: #111111;
   --surface: #f7f0f5;

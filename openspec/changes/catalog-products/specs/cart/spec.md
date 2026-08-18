@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the local, session-only cart and its handoff to a guest checkout/order boundary. Payment processing, authentication, and durable persistence remain deferred.
+Define the local, session-only cart and its handoff to a guest checkout/order boundary. The cart does not process payments; the checkout boundary persists the authoritative guest order and hands payment lifecycle ownership to the existing provider-authoritative checkout capability.
 
 ## Requirements
 
@@ -98,14 +98,19 @@ Cart state MUST remain client-local for the current page session. It MUST NOT be
 
 ### Requirement: Guest checkout order boundary
 
-The checkout boundary MUST accept guest contact and shipping data without requiring authentication. It MAY keep a nullable authenticated user reference when one is supplied by a future trusted identity boundary. The server MUST derive product prices, line totals, and order total from active trusted catalog and variant data, not client-submitted totals, and MUST return a local pending confirmation without payment processing or durable order persistence.
+The checkout boundary MUST accept guest contact and shipping data without requiring authentication. It MAY keep a nullable authenticated user reference when one is supplied by a future trusted identity boundary. The server MUST derive product prices, line totals, and order total from active trusted catalog and variant data, not client-submitted totals, and MUST persist the resulting pending order and stock reservation in PostgreSQL before payment submission. Payment processing is outside the cart boundary: the existing checkout-payments capability owns tokenized payment submission, durable attempt history, reconciliation, and provider-authoritative state transitions. Browser responses MUST NOT mark the durable order paid.
 
 #### Scenario: Guest order is submitted
 - GIVEN a guest supplies valid contact and shipping data with eligible cart lines
 - WHEN `/api/checkout/orders` receives the request
-- THEN it MUST accept the request without authentication and return a local pending confirmation with a nullable user reference
+- THEN it MUST accept the request without authentication and return a durable pending order with a nullable user reference and safe status capability
 
 #### Scenario: Client total is tampered
 - GIVEN a checkout request includes a client total that differs from catalog prices
-- WHEN `/api/checkout/orders` builds the local order
+- WHEN `/api/checkout/orders` builds and persists the pending order
 - THEN the returned total MUST be derived from trusted catalog and variant prices
+
+#### Scenario: Provider state remains authoritative
+- GIVEN a durable guest order has been handed to the checkout-payments capability
+- WHEN a browser result is incomplete or provider evidence is non-final
+- THEN the order MUST remain pending until the existing provider-authoritative lifecycle records eligible evidence

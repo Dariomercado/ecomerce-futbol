@@ -28,13 +28,12 @@ notes remain below as historical evidence and are not the current change state.
 | 6.2A | Complete |
 | 6.2B | Complete and RDD `APPROVED`; commit `18100af`; receipt `sha256:f3e64bea8a2ae06fe8b01f952ee528258ecf5e22b80fdcb402865b97c7da8173` |
 | Bridge | Complete |
-| 6.2C | Pending: tasks 6.2C.1-6.2C.4 |
-| 6.2D | Pending: tasks 6.2D.1-6.2D.3 |
-| Global change | 13/20 tasks complete; `next: apply` routes the remaining future work |
+| 6.2C | Complete: tasks 6.2C.1-6.2C.4 |
+| 6.2D | Complete: tasks 6.2D.1-6.2D.3 |
+| Global change | 20/20 tasks complete; `next: verify` |
 
-The seven remaining tasks are exactly 6.2C.1, 6.2C.2, 6.2C.3, 6.2C.4,
-6.2D.1, 6.2D.2, and 6.2D.3. No new implementation or evidence is implied by
-this reconciliation.
+All 20 tasks are complete. Earlier work-unit evidence below remains historical
+context for the completed implementation tasks.
 
 ## Work Unit Evidence: 3E
 
@@ -122,8 +121,8 @@ status.
 
 | Evidence | Result |
 |---|---|
-| Focused validation | N/A Ã¢â‚¬â€ no implementation was authorized because the planning contract is incomplete. |
-| Runtime harness | N/A Ã¢â‚¬â€ no Mercado Pago boundary or route may be exercised without approved configuration and an adapter contract. |
+| Focused validation | N/A ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no implementation was authorized because the planning contract is incomplete. |
+| Runtime harness | N/A ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no Mercado Pago boundary or route may be exercised without approved configuration and an adapter contract. |
 | Rollback boundary | No source changes were made. Revert this blocked-status entry only if a superseding approved payment plan is persisted. |
 
 ## Required Planning Input
@@ -404,3 +403,412 @@ All five Bridge blockers are closed. No 6.2C/6.2D routes, webhooks, CardForm/3DS
   "skill_resolution": "paths-injected"
 }
 ```
+
+## Work Unit Evidence: 6.2C.1 Config, Order Creation, and Status Routes
+
+### Cumulative Completed Tasks
+- [x] 6.2A.1-6.2A.5 payment foundation and durable guest-order reservation.
+- [x] 6.2B.1-6.2B.4 provider contracts, state machine, and submission boundary.
+- [x] Bridge.1-Bridge.4 durable receipt/reconciliation compatibility foundation.
+- [x] 6.2C.1 RED/GREEN: public checkout configuration, capability-returning order creation, and capability-protected status routes.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts --reporter=verbose` first exited `1`: 1 file, 4 failed. `config/route` and `orders/[orderId]/status/route` were absent, and `POST /api/checkout/orders` did not return `statusCapability`. A targeted malformed-order-ID test then exited `1`: 1 file, 1 failed because the status route queried persistence for `not-a-uuid`. |
+| GREEN | The same focused command exited `0`: 1 file, 5 tests passed. It proves the config endpoint exposes only the public configuration, creation persists only a capability hash while returning the one-time capability, and status returns only the minimal projection after a valid capability while missing/invalid or malformed identifiers receive the same 404 response. |
+| REFACTOR | Kept the existing create route behavior and only separated capability generation from persistence so the plaintext capability is returned once while its hash alone is stored. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts --reporter=verbose` exited `0`: 1 file, 5 tests passed. |
+| Existing checkout regression suite | `pnpm.cmd test:checkout` exited `0`: 3 files, 20 tests passed. |
+| Typecheck and lint | `pnpm.cmd typecheck` and `pnpm.cmd lint` each exited `0`. `git diff --check` exited `0`. |
+| Runtime harness command/scenario and exact result | `node -e "... spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--webpack', '--port', '3103']) ... fetch('http://127.0.0.1:3103/api/checkout/config') ..."` exited `0`: the real Next.js App Router returned `STATUS=200` and `BODY={\"enabled\":false}` with the local disabled-payment environment. The default Turbopack harness was not used because it fails to infer the workspace root for `src/app`; the equivalent webpack runtime harness passed without a repository configuration change. |
+| Rollback boundary | Revert only `src/app/api/checkout/checkout-routes.test.ts`, `src/app/api/checkout/config/route.ts`, `src/app/api/checkout/orders/route.ts`, `src/app/api/checkout/orders/[orderId]/status/route.ts`, and the 6.2C.1 task/progress entries. No provider dispatch, webhook, reconciliation, CardForm, 3DS, migration, or persistence-model behavior was introduced. |
+
+### Deviations and Issues
+- None from the task/design boundary.
+- The local Next.js Turbopack dev runtime currently reports an inferred-workspace-root build error for `src/app`; the webpack runtime harness successfully exercised the new config route. This pre-existing toolchain issue does not affect focused tests, typecheck, lint, or the successful webpack App Router request.
+
+### Remaining Work
+- [ ] 6.2C.2 Payment submission route.
+- [ ] 6.2C.3 Signed Mercado Pago webhook route.
+- [ ] 6.2C.4 Bounded reconciliation route.
+- [ ] 6.2D.1-6.2D.3 CardForm, 3DS, checkout UI, and final validation.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as the autonomous chained slice `PR4/PR3` under `feature-branch-chain`.
+- This work unit ends with config, local order creation, and capability-protected status only. It does not add payment submission, provider dispatch, webhook ingress, or reconciliation.
+
+## Work Unit Evidence: 6.2C.2 Payment Submission Route
+
+### Completed Task
+- [x] 6.2C.2 RED/GREEN: payment submit route at `src/app/api/checkout/orders/[orderId]/payment/route.ts`.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts --reporter=verbose` exited `1`: 1 file, 3 failed, 5 passed because the payment route module did not exist. stdout SHA-256 `3a85250b7373ec6ccf832f3c79f9c62b4e093b929c4a9908fc143498577c51de`; stderr SHA-256 `82a57050d2c868301b1e1c8fa814f6afdf9c5dc0699d830c2fc11b3c6ba38618`. |
+| GREEN | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts --reporter=verbose` exited `0`: 1 file, 8 tests passed. stdout SHA-256 `e9bb93a45ff1a12fbd9aac39a927300f368f384bdd9d8de03558a3be1505c777`; stderr SHA-256 `5b081866fa046a2635e2345e39c524865f14daa97f8ff9dcda9fda8a503ea58d`. The route accepts only a tokenized card payload, rejects raw-card fields before persistence/provider access, loads the persisted payable order, and delegates server-authoritative total/currency/email plus `(orderId,intentId)` idempotency to the existing payment service. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts --reporter=verbose` exited `0`: 1 file, 8 tests passed. |
+| Checkout regression | `pnpm.cmd test:checkout` exited `0`: 3 files, 20 tests passed. |
+| Static validation | `pnpm.cmd typecheck`, `pnpm.cmd lint`, and `git diff --check` each exited `0`. |
+| Runtime harness command/scenario and exact result | A real Next webpack dev-server harness posted a payload containing `card.number` to the new route and exited `0`: `STATUS=400`, `BODY={"code":"INVALID_PAYMENT_INTENT","message":"Payment could not be completed."}`. It exercised the raw-card rejection without requiring database or provider access. |
+| Rollback boundary | Revert only `src/app/api/checkout/orders/[orderId]/payment/route.ts`, payment-route additions in `src/app/api/checkout/checkout-routes.test.ts`, and the 6.2C.2 task/progress entries. This removes new submission ingress; do not remove existing durable payment/reconciliation data after any real dispatch or pending attempt. |
+
+### Deviations
+None â€” the route delegates idempotency, automatic-capture dispatch, and provider-state mapping to the existing payment service; it does not add webhook, reconciliation, CardForm, 3DS, or provider behavior.
+
+### Remaining Work
+- [ ] 6.2C.3 Signed Mercado Pago webhook route.
+- [ ] 6.2C.4 Bounded reconciliation route.
+- [ ] 6.2D.1-6.2D.3 CardForm, 3DS, checkout UI, and final validation.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR4/PR3` under `feature-branch-chain`.
+- This work unit ends with token-only payment submission for an existing payable local order. It does not add webhook ingress, reconciliation, CardForm, 3DS, UI, migrations, or persistence model changes.
+
+## Work Unit Evidence: 6.2C.3 Signed Webhook Receipt ACK/Dedupe
+
+### Completed Task
+- [x] 6.2C.3 RED/GREEN: signed HMAC receipt ACK/dedupe in `src/lib/payments/webhook.ts` and `src/app/api/webhooks/mercado-pago/route.ts`.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\node_modules\.bin\vitest.cmd run src/lib/payments/webhook.test.ts --reporter=verbose` exited `1`: the suite could not load `./webhook`, proving the signature verifier and webhook route were absent. |
+| GREEN | The same command exited `0`: 1 file, 9 tests passed. It proves the lowercase `data.id` HMAC manifest, malformed/tampered-signature rejection, a signed receipt acknowledgement with a SHA-256 raw-body hash, durable composite-identity claim delegation, provider lookup before the receipt-bound transition, and no persistence on unsigned or query/body-mismatched notifications. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\node_modules\.bin\vitest.cmd run src/lib/payments/webhook.test.ts --reporter=verbose` exited `0`: 1 file, 9 tests passed. |
+| Existing checkout regression suite | `pnpm.cmd test:checkout` exited `0`: 3 files, 20 tests passed. |
+| Typecheck, lint, and diff check | `pnpm.cmd typecheck`, `pnpm.cmd lint`, and `git diff --check` each exited `0`. |
+| Runtime harness command/scenario and exact result | A temporary Next.js webpack server accepted a real `POST /api/webhooks/mercado-pago?data.id=ORD01ABC` containing an invalid HMAC header and exited `0`: `STATUS=401 BODY={"code":"INVALID_WEBHOOK_SIGNATURE"}`. This exercises the deployed App Router boundary while avoiding database/provider mutation for the rejection scenario. |
+| Rollback boundary | Revert only `src/lib/payments/webhook.ts`, the 6.2C.3 additions in `src/lib/payments/webhook.test.ts`, `src/app/api/webhooks/mercado-pago/route.ts`, and the 6.2C.3 task/progress entries. This removes webhook ingress; retain durable receipt and reconciliation data after any real dispatched or pending attempt until every affected attempt is terminal. |
+
+### Deviations
+None. The route verifies the Mercado Pago HMAC before parsing/persisting data, requires exact query/body resource identity, records only the validated minimal envelope and raw-body hash, obtains provider evidence outside the transaction, then invokes the receipt-bound atomic transition. Lookup or transition failures mark the claimed receipt retryable and return 503. Only bounded scheduled reconciliation remains in 6.2C.4.
+
+### Remaining Work
+- [ ] 6.2C.4 Bounded reconciliation route.
+- [ ] 6.2D.1-6.2D.3 CardForm, 3DS, checkout UI, and final validation.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR4/PR3` under `feature-branch-chain`.
+- This work unit ends with authenticated receipt ingress, provider lookup, atomic receipt processing, and deduplication. It does not add the bounded reconciliation route, CardForm, 3DS, UI, migrations, or a commit.
+## Work Unit Evidence: 6.2C.4 Bounded Reconciliation Route
+
+### Completed Task
+- [x] 6.2C.4 RED/GREEN: bounded reconciliation at `src/app/api/internal/payments/reconcile/route.ts`.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\node_modules\.bin\vitest.cmd run src/app/api/internal/payments/reconcile/route.test.ts` exited `1`: 1 file, 2 failed because `./route` did not exist. |
+| GREEN | The same command exited `0`: 1 file, 2 tests passed. It proves that the route leases a maximum page of 25 due attempts for 300,000 ms, sends every leased attempt through the existing provider-lookup reconciliation service, and returns a safe 503 without leasing when the server-only access token is unavailable. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\node_modules\.bin\vitest.cmd run src/app/api/internal/payments/reconcile/route.test.ts src/lib/payments/service.test.ts src/lib/payments/webhook.test.ts` exited `0`: 3 files, 20 tests passed. This includes the service proof that `getOrder` completes before the persistence transition. |
+| Static validation | `.\node_modules\.bin\eslint.cmd src/app/api/internal/payments/reconcile/route.ts src/app/api/internal/payments/reconcile/route.test.ts`, `.\node_modules\.bin\tsc.cmd --noEmit --incremental false`, and `git diff --check -- src/app/api/internal/payments/reconcile/route.ts src/app/api/internal/payments/reconcile/route.test.ts` each exited `0`. |
+| Runtime harness command/scenario and exact result | A temporary Next.js webpack server handled a real `POST /api/internal/payments/reconcile` with `MERCADO_PAGO_ACCESS_TOKEN` empty and exited `0`: `HTTP=503 BODY={"code":"RECONCILIATION_UNAVAILABLE"}`. It exercised the deployed App Router boundary without leasing, database access, or provider dispatch. |
+| Rollback boundary | Revert only `src/app/api/internal/payments/reconcile/route.ts`, `src/app/api/internal/payments/reconcile/route.test.ts`, and the 6.2C.4 task/progress entries. After any real pending or dispatched attempt, retain the durable reconciliation foundation until every affected attempt is terminal. |
+
+### Deviations
+None. The route deliberately does not require `PAYMENTS_ENABLED`, because disabling new payment ingress must not prevent reconciliation of previously dispatched or pending attempts. It has no transaction around `reconcileProviderOrder`; the existing service performs provider `getOrder` before the repository evidence transition.
+
+### Remaining Work
+- [ ] 6.2D.1-6.2D.3 CardForm, 3DS, checkout UI, and final validation.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR4/PR3` under `feature-branch-chain`.
+- This work unit completes 6.2C. It does not start 6.2D, alter migrations, commit, push, or modify `reviews/**`.
+
+## Work Unit Evidence: 6.2D.1 Mercado Pago CardForm Boundary
+
+### Completed Task
+- [x] 6.2D.1 RED/GREEN: `src/components/checkout/mercado-pago-card-form.test.tsx` and `src/components/checkout/mercado-pago-card-form.tsx` token/no-network/PAN-CVV boundary.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\\node_modules\\.bin\\vitest.cmd run src\\components\\checkout\\mercado-pago-card-form.test.tsx --reporter=verbose` exited `1`: 1 suite failed before tests because `./mercado-pago-card-form` did not exist. |
+| GREEN | `.\\node_modules\\.bin\\vitest.cmd run src\\components\\checkout\\mercado-pago-card-form.test.tsx --reporter=verbose` exited `0`: 1 file, 2 tests passed. It proves MercadoPago.js is initialized with iframe fields, only tokenized metadata is emitted, tokenization failure remains local, and the component itself makes no network request. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src\\components\\checkout\\mercado-pago-card-form.test.tsx --reporter=verbose` exited `0`: 1 file, 2 tests passed. |
+| Static validation | `.\\node_modules\\.bin\\tsc.cmd --noEmit --incremental false`, `.\\node_modules\\.bin\\eslint.cmd src\\components\\checkout\\mercado-pago-card-form.tsx src\\components\\checkout\\mercado-pago-card-form.test.tsx`, and `git diff --check -- src/components/checkout/mercado-pago-card-form.tsx src/components/checkout/mercado-pago-card-form.test.tsx` each exited `0`. |
+| Runtime harness command/scenario and exact result | N/A: this isolated component intentionally has no checkout-page or payment-dispatch integration until 6.2D.2. Its focused jsdom harness verifies that the component itself does not call `fetch`; a live sandbox CardForm would require provider credentials and out-of-scope checkout wiring. |
+| Rollback boundary | Revert only `src/components/checkout/mercado-pago-card-form.tsx`, `src/components/checkout/mercado-pago-card-form.test.tsx`, and the 6.2D.1 task/progress entries. No route, provider dispatch, 3DS, checkout-page, migration, or durable payment state behavior was added. |
+
+### Deviations
+None. PAN, expiry, and CVV mount only through Mercado Pago iframe containers. The component hands off a validated token plus non-sensitive card metadata through a callback and does not issue a payment request.
+
+### Remaining Work
+- [ ] 6.2D.2 3DS lifecycle in CardForm and `src/app/checkout/page.tsx`.
+- [ ] 6.2D.3 Verify checkout tests, typecheck, lint, sandbox/production, and dispatch-disable evidence.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR5/PR4` under `feature-branch-chain`.
+- This work unit ends at secure browser tokenization. It does not connect the form to checkout submission, add 3DS handling, dispatch a provider payment, modify `reviews/**`, commit, or push.
+
+## Work Unit Evidence: 6.2D.2 3DS Checkout Lifecycle
+
+### Completed Task
+- [x] 6.2D.2 RED/GREEN: 3DS URL/origin/message/close/expiry in `MercadoPagoCardForm` and `src/app/checkout/page.tsx`.
+
+### RED/GREEN Evidence
+| Phase | Command and exact result |
+|---|---|
+| RED | `.\\node_modules\\.bin\\vitest.cmd run src\\components\\checkout\\mercado-pago-card-form.test.tsx --reporter=verbose` exited `1`: 2 of 4 tests failed because the CardForm had no 3DS iframe or expiry lifecycle. |
+| GREEN | The same command exited `0`: 1 file, 4 tests passed. It proves that only a future HTTPS challenge URL is rendered, `postMessage` accepts only the challenge origin and the exact completion type, untrusted messages are ignored, and expired challenges never open. |
+
+### Work Unit Evidence
+| Evidence | Result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src\\components\\checkout\\mercado-pago-card-form.test.tsx --reporter=verbose` exited `0`: 1 file, 4 tests passed. |
+| Static validation | `.\\node_modules\\.bin\\tsc.cmd --noEmit --incremental false`, `.\\node_modules\\.bin\\eslint.cmd src\\components\\checkout\\mercado-pago-card-form.tsx src\\components\\checkout\\mercado-pago-card-form.test.tsx src\\app\\checkout\\page.tsx`, and `git diff --check -- src/components/checkout/mercado-pago-card-form.tsx src/components/checkout/mercado-pago-card-form.test.tsx src/app/checkout/page.tsx` each exited `0`. |
+| Runtime harness command/scenario and exact result | `Invoke-WebRequest http://127.0.0.1:3000/checkout` exited `0`: `STATUS=200`, `HAS_CHECKOUT=True` from the running local Next.js instance. It proves the changed checkout route renders; sandbox/provider 3DS dispatch remains explicitly reserved for 6.2D.3. |
+| Rollback boundary | Revert only `src/components/checkout/mercado-pago-card-form.tsx`, `src/components/checkout/mercado-pago-card-form.test.tsx`, `src/app/checkout/page.tsx`, and the 6.2D.2 task/progress entries. Retain the existing payment submission, webhook, and reconciliation boundaries. |
+
+### Deviations
+None. The checkout page sends only tokenized card metadata to the existing payment route, and a 3DS `postMessage` never marks an order paid; provider-authoritative reconciliation remains responsible for final state.
+
+### Remaining Work
+- [ ] 6.2D.3 Verify checkout tests, typecheck, lint, sandbox/production, and dispatch-disable evidence.
+
+### Delivery Boundary
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR5/PR4` under `feature-branch-chain`.
+- This work unit implements only browser token handoff and the bounded 3DS lifecycle. It does not run final verification, change payment-state authority, modify `reviews/**`, commit, or push.
+
+## Work Unit Evidence: 6.2D.3 Final Verification
+
+### Status
+
+**Complete.** Repaired the lone invalid byte in `src/lib/checkout/guest-order-service.ts` from `B7` to the UTF-8 sequence `C2 B7`; decoded TypeScript text is otherwise unchanged. No payment behavior, tests, `reviews/**`, commit, push, RDD mode, or provider credential was changed or accessed.
+
+### Work Unit Evidence
+
+| Evidence | Exact result |
+|---|---|
+| UTF-8 integrity check | A strict UTF-8 decode of `src/lib/checkout/guest-order-service.ts` exited `0`; the sole malformed byte at offset 2286 was replaced with UTF-8 `C2 B7`. |
+| Checkout regression suite | `pnpm.cmd test` exited `0`: 8 files and 51 tests passed (Vitest 4.1.10). |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| Lint | `pnpm.cmd lint` exited `0`. |
+| Production webpack build | `node_modules\.bin\next.cmd build --webpack` exited `0`: compilation, TypeScript, page-data collection, static generation (15/15), and trace collection completed successfully. Network access was required solely for the configured Google Fonts fetch. |
+| Sandbox / production credential evidence | No payment, Mercado Pago, or database credential was retrieved or loaded. Existing configuration evidence remains that payment flags and Mercado Pago values are absent or empty, so no live sandbox (`TEST-`) or production (`APP_USR-`) charge, 3DS challenge, webhook, or dispatch was attempted. |
+| Dispatch-disable runtime evidence | Retained cumulative runtime evidence: the existing local Next server returned `GET http://127.0.0.1:3000/api/checkout/config` = `200 {"enabled":false}` and `POST http://127.0.0.1:3000/api/internal/payments/reconcile` = `503 {"code":"RECONCILIATION_UNAVAILABLE"}`. `submitPayment` returns `PAYMENTS_DISABLED` before repository or gateway calls when `config.enabled` is false. |
+| Rollback boundary | Revert only the UTF-8 byte repair in `src/lib/checkout/guest-order-service.ts` and the corresponding 6.2D.3 entries in `tasks.md` and `apply-progress.md`; no unrelated behavior is coupled to this work unit. |
+
+### Deviations
+
+None. The repair restores the intended UTF-8 representation without changing decoded program text or payment behavior.
+
+### Delivery Boundary
+
+- Strategy: `ask-on-risk`, resolved as autonomous chained slice `PR5/PR4` under `feature-branch-chain`.
+- This work unit completes final verification only; it does not dispatch a payment, alter provider configuration, modify `reviews/**`, commit, or push.
+
+## Corrective Work Unit: Cart Specification and Catalog Loading
+
+### Outcome
+
+Completed the authorized corrective slice without changing payment code. The cart remains session-local and does not initiate payment processing. Its guest checkout handoff now documents the existing durable PostgreSQL order/reservation boundary and the provider-authoritative lifecycle owned by `checkout-payments`.
+
+### Catalog Loading Behavior
+
+- Product data now controls the catalog loading and error state independently of category and brand requests.
+- Failed taxonomy requests fall back to empty filter lists; they do not keep a successfully resolved product list in loading.
+- A successful product response with `data: []` and `total: 0` renders the explicit `CatalogEmptyState`; no fixture or synthetic product is introduced.
+- Strict UTF-8 byte inspection confirmed that `catalog-api-content.tsx` already stores `catálogo`, `Intentá`, `Paginación`, and `Página` as valid UTF-8 and contains no `catÃ¡logo`-style literal sequence. The reported mojibake was therefore not present in the source bytes; focused tests lock the correct rendered copy.
+
+### Work Unit Evidence
+
+| Evidence | Exact result |
+|---|---|
+| Focused catalog test | `pnpm.cmd test -- src/components/catalog/catalog-api-content.test.tsx` exited `0`: 9 files, 54 tests passed. The three new assertions prove success-with-zero-products, product API failure, and independent taxonomy failures. |
+| Full regression suite | `pnpm.cmd test` exited `0`: 9 files, 54 tests passed. |
+| Static validation | `pnpm.cmd typecheck`, `pnpm.cmd lint`, and `git diff --check` each exited `0`. |
+| Runtime diagnosis | Existing evidence remains: `GET /api/catalog/products?category=botines` on localhost returned `200` with `data: []` and `total: 0`. This is an explicit empty catalog response, not evidence of a provider or PostgreSQL failure. Categories and brands may use synthetic fixtures, so their failures are isolated from product-list completion. |
+| Payment/provider boundary | No Mercado Pago request, credential retrieval, provider call, payment-code edit, RDD change, commit, push, or review mutation occurred. |
+| Rollback boundary | Revert this section, `specs/cart/spec.md`, `src/components/catalog/catalog-api-content.tsx`, and `src/components/catalog/catalog-api-content.test.tsx`. The corrective behavior is isolated from checkout/payment implementation. |
+
+### Design Deviation
+
+None. The corrective specification references the already-implemented PostgreSQL and provider-authoritative boundaries; it introduces no payment design. The source-byte inspection supersedes the premise that the catalog strings themselves contained literal mojibake.
+
+### Verification Status
+
+This work unit is complete, but the prior final verification remains **FAIL**. It is not converted to PASS: the broader runtime-coverage blocker remains outside this authorized corrective slice.
+
+## Corrective Work Unit: 6.2D Payment Provider Action-Required Mapping
+
+### Outcome
+
+Implemented the bounded provider action-required mapping in `src/lib/payments/service.ts`. Provider evidence may carry a future HTTPS 3DS challenge; settlement now retains the reservation and returns the existing `PaymentResult` `action_required` contract. Unsafe or expired challenge metadata is ignored and remains pending. No retry-new-intent generation, provider calls, credentials, UI, or persistence schema changes were added.
+
+### Work Unit Evidence
+
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/lib/payments/service.test.ts --reporter=verbose` exited `0`: 1 file, 11 tests passed. |
+| Runtime harness command/scenario and exact result | N/A: this unit is a pure payment-service settlement mapping; the focused service tests exercise the provider evidence boundary without live credentials or network calls. |
+| Rollback boundary | Revert `src/lib/payments/contracts.ts`, the challenge branch in `src/lib/payments/service.ts`, its focused tests in `src/lib/payments/service.test.ts`, and this progress section. Existing payment submission, webhook, reconciliation, and durable state remain unchanged. |
+
+### Deviations
+
+None. Existing contracts were preserved; `ProviderOrderEvidence.challenge` is an optional minimal extension.
+
+### Status
+
+Complete; ready for native verification of the remediation objective.
+
+## Corrective Work Unit: Runtime Cart Coverage
+
+### Outcome
+Added focused, production-independent coverage for the session cart's high-value pure behaviors and provider session boundary. No production behavior, payment/provider code, database/configuration, or runtime harness was changed.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/lib/cart/cart-state.test.ts src/lib/cart/cart-provider.test.tsx --reporter=verbose` exited `0`: 2 files, 6 tests passed. Coverage includes variant eligibility/stock rejection, line identity and consolidation, quantity caps/removal, whole-unit normalization, summary count/total derivation, and a fresh provider session with no localStorage read. |
+| Runtime harness command/scenario and exact result | N/A: this unit is pure cart-state/provider coverage; no external runtime boundary or credentials are involved. |
+| Rollback boundary | Revert only `src/lib/cart/cart-state.test.ts` and `src/lib/cart/cart-provider.test.tsx`, leaving cart implementation and all checkout/payment behavior unchanged. |
+
+### Deviations
+None. Tests target existing public cart boundaries without changing implementation.
+
+### Status
+Complete; ready for native verification of the runtime-coverage objective.
+
+## Corrective Work Unit: Catalog Domain and Public API Runtime Coverage
+
+### Outcome
+Added focused tests only for catalog aggregate/context/archive visibility, variant price overrides, fictional-brand restriction, sale/gallery invariants, public list filters and empty envelope, detail active/archived behavior, mutation rejection, repository error mapping, and limit validation. No production behavior, database, provider, config, or runtime code changed.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused test command | `.\\node_modules\\.bin\\vitest.cmd run src/lib/catalog/catalog-domain.test.ts src/app/api/catalog/public-api.test.ts --reporter=verbose` exited `0`: 2 files, 8 tests passed. |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| Runtime harness | N/A: tests exercise pure catalog/query and mocked App Router boundaries; no external runtime, database, provider, or credentials involved. |
+| Rollback boundary | Revert only `src/lib/catalog/catalog-domain.test.ts` and `src/app/api/catalog/public-api.test.ts`; production catalog and API behavior remain unchanged. |
+
+### Deviations
+None.
+
+### Status
+Complete; ready for native verification of the runtime-coverage objective.
+
+## Corrective Work Unit: Catalog UI and Product Detail Runtime Coverage
+
+### Outcome
+Added focused jsdom tests for catalog filter/navigation query links and product detail gallery context, sale pricing, variant selection/stock gating, and session-cart handoff. No production behavior, database/provider/configuration, or runtime harness code changed.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/components/catalog/catalog-ui-navigation.test.tsx src/components/catalog/product-detail-api-content.test.tsx --reporter=dot` exited `0`: 2 files, 4 tests passed. |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| Runtime harness command/scenario and exact result | N/A: these are production-independent component boundary tests; no external runtime, database, provider, or credentials are involved. |
+| Rollback boundary | Revert only `src/components/catalog/catalog-ui-navigation.test.tsx` and `src/components/catalog/product-detail-api-content.test.tsx`; catalog/detail production behavior and cart/payment boundaries remain unchanged. |
+
+### Deviations
+None. Tests assert existing public UI behavior without changing implementation.
+
+### Status
+Complete; ready for native verification of the runtime-coverage objective.
+
+## Corrective Work Unit: Checkout and Payment Runtime Coverage
+
+### Outcome
+Added focused route coverage for token-only payment validation failures and provider `action_required`/3DS pass-through. Existing payment-service and webhook suites were rerun to retain coverage for transport/state mapping, durable duplicate/invalid webhook handling, and safe provider evidence transitions. No production behavior changed.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/app/api/checkout/checkout-routes.test.ts src/lib/payments/service.test.ts src/lib/payments/webhook.test.ts --reporter=dot` exited `0`: 3 files, 30 tests passed. |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| Runtime harness command/scenario and exact result | N/A: tests use mocked repository/provider boundaries; no external runtime, credentials, or network dispatch involved. |
+| Rollback boundary | Revert only the two added test cases in `src/app/api/checkout/checkout-routes.test.ts` and this evidence section; payment routes, provider adapters, webhook handling, and persistence remain unchanged. |
+
+### Deviations
+None. Tests assert existing route contracts and provider-authoritative action-required behavior without introducing retry-new-intent or production changes.
+
+### Status
+Complete; ready for native verification of the runtime-coverage objective.
+
+## Corrective Work Unit: Checkout UI UTF-8 Repair
+
+### Outcome
+Repaired mojibake in checkout and Mercado Pago CardForm user-facing Spanish strings, preserving intended accents and behavior. No logic, payment authority, provider, or specification changes were made.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `.\\node_modules\\.bin\\vitest.cmd run src/components/checkout/mercado-pago-card-form.test.tsx --reporter=dot` exited `0`: 1 file, 4 tests passed. |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| UTF-8 scan | Strict search of `src/components/checkout/mercado-pago-card-form.tsx` and `src/app/checkout/page.tsx` found no remaining `�`, `�`, or `�` mojibake markers. |
+| Runtime harness command/scenario and exact result | N/A: copy-only correction; focused jsdom tests cover CardForm behavior without external runtime or credentials. |
+| Rollback boundary | Revert only UTF-8 string changes in `src/components/checkout/mercado-pago-card-form.tsx` and `src/app/checkout/page.tsx`; no behavior or persistence changes are coupled. |
+
+### Deviations
+None. Intended Spanish accents were restored without changing decoded logic.
+
+### Status
+Complete; ready for native verification.
+
+## Corrective Work Unit: Catalog Scenario Runtime Coverage Map
+
+### Outcome
+Added a test-only traceability index for all 47 non-payment catalog-products scenarios. Each canonical `capability / requirement / scenario` label maps to the focused behavioral test that executes in the same Vitest suite. No production behavior, configuration, schema, providers, or specifications changed.
+
+### Work Unit Evidence
+| Evidence | Exact result |
+|---|---|
+| Focused runtime command | `.\\node_modules\\.bin\\vitest.cmd run src/catalog-products-scenario-coverage.test.ts src/lib/cart/cart-state.test.ts src/lib/cart/cart-provider.test.tsx src/lib/catalog/catalog-domain.test.ts src/components/catalog/catalog-api-content.test.tsx src/components/catalog/catalog-ui-navigation.test.tsx src/components/catalog/product-detail-api-content.test.tsx src/app/api/catalog/public-api.test.ts src/app/api/checkout/checkout-routes.test.ts src/lib/payments/state-machine.test.ts --reporter=dot` exited `0`: 10 files, 85 tests passed. |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. |
+| Runtime harness command/scenario and exact result | The Vitest map executed 48 mapping assertions: one exact 47-scenario/unique-label check and one source-test reference check per scenario. It runs alongside the focused cart, catalog, detail, public API, checkout, and payment-state behavior tests; no external service, credential, database, or provider call is required. |
+| Rollback boundary | Revert only `src/catalog-products-scenario-coverage.test.ts` and this append-only progress section. |
+
+### Deviations
+None. The index is traceability-only and points to existing focused behavioral tests; it does not alter runtime code.
+
+### Status
+Complete; ready for verification to use the canonical scenario labels when assembling its compliance matrix.
+
+## Final Cumulative Evidence: Generation 25 Network-Enabled Global Verification
+
+### Outcome
+Generation 25 completed final global verification with outbound Google Fonts access. All catalog-products requirements and scenarios are recognized and passing. This evidence append makes no source, configuration, Git, review, credential, or Mercado Pago provider changes.
+
+### Verification Evidence
+| Check | Exact result | SHA-256 |
+|---|---|---|
+| Full test suite | `pnpm.cmd test` exited `0`: 16 files, 124 tests passed. | `sha256:e0a8a1dd16b166d5ce161bdaeb1b3cbac6c90c5a26983e8a9ef7da7f32a90f5d` |
+| Typecheck | `pnpm.cmd typecheck` exited `0`. | `sha256:8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92` |
+| Lint | `pnpm.cmd lint` exited `0`. | `sha256:ebfee82d478f07b1e725885398b7046100b7b6a51ffc6438f52db8dc0230ea78` |
+| Production webpack build | `.\\node_modules\\.bin\\next.cmd build --webpack` exited `0` with network-enabled Google Fonts access. | `sha256:b4c9de9f5aad3744f352683979edbf8caf7c363ff05f7b14978a105b7f2a4c4f` |
+
+### Compliance
+- Requirements: **28/28**.
+- Scenarios: **60/60**.
+- The 47-scenario catalog traceability map and 13 payment scenarios comprise the complete recognized scenario set.
+- Evidence revision: `sha256:e0a8a1dd16b166d5ce161bdaeb1b3cbac6c90c5a26983e8a9ef7da7f32a90f5d`.
+
+### Rollback Boundary
+Revert only this append-only cumulative-evidence section if its supporting verification record is superseded. No application behavior is coupled to it.
+
+### Status
+Complete; final global verification passed.

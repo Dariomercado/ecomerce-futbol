@@ -27,30 +27,41 @@ export function CatalogApiContent({ brand, category, featuredOnly, page }: Props
   useEffect(() => {
     const controller = new AbortController();
 
-    async function load() {
+    async function loadProducts() {
       try {
-        const [products, categoryItems, brandItems] = await Promise.all([
-          fetch(requestUrl, { signal: controller.signal }),
-          fetch("/api/catalog/categories", { signal: controller.signal }),
-          fetch("/api/catalog/brands", { signal: controller.signal }),
-        ]);
-        if (!products.ok || !categoryItems.ok || !brandItems.ok) throw new Error();
-        const [list, nextCategories, nextBrands]: unknown[] = await Promise.all([products.json(), categoryItems.json(), brandItems.json()]);
-        if (!isProductList(list) || !Array.isArray(nextCategories) || !Array.isArray(nextBrands)) throw new Error();
+        const products = await fetch(requestUrl, { signal: controller.signal });
+        if (!products.ok) throw new Error();
+        const list: unknown = await products.json();
+        if (!isProductList(list) || controller.signal.aborted) return;
         setData(list.data);
         setPagination(list.pagination);
-        setCategories(nextCategories as CategorySummary[]);
-        setBrands(nextBrands as BrandSummary[]);
         setErrorUrl(null);
         setLoadedUrl(requestUrl);
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
           setLoadedUrl(requestUrl);
           setErrorUrl(requestUrl);
         }
       }
     }
-    void load();
+
+    async function loadTaxonomy<T>(url: string, setItems: (items: T[]) => void) {
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error();
+        const items: unknown = await response.json();
+        if (!Array.isArray(items) || controller.signal.aborted) return;
+        setItems(items as T[]);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
+          setItems([]);
+        }
+      }
+    }
+
+    void loadProducts();
+    void loadTaxonomy<CategorySummary>("/api/catalog/categories", setCategories);
+    void loadTaxonomy<BrandSummary>("/api/catalog/brands", setBrands);
     return () => controller.abort();
   }, [requestUrl]);
 

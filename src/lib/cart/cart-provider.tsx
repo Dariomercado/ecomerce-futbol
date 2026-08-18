@@ -10,6 +10,7 @@ type CartContextValue = {
   addItem: (selection: CartSelection) => void;
   removeItem: (lineId: string) => void;
   setQuantity: (lineId: string, quantity: number) => void;
+  clearCart: () => void;
   itemCount: number;
   total: number;
 };
@@ -25,6 +26,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     addItem(selection) { setItems((current) => addCartItem(current, selection)); },
     removeItem(lineId) { setItems((current) => current.filter((item) => item.lineId !== lineId)); },
     setQuantity(lineId, quantity) { setItems((current) => setCartItemQuantity(current, lineId, quantity)); },
+    clearCart() { setItems([]); },
   }), [items]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

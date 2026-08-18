@@ -39,3 +39,6 @@ yarn-error.log*
 next-env.d.ts
 # Local AI runtime state
 .atl/
+
+# Generated local OpenSpec review authority mirrors
+/openspec/changes/*/reviews/

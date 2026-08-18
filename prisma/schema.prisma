@@ -121,6 +121,18 @@ enum OrderStatus {
   PAYMENT_PENDING
   PAID
   PAYMENT_FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PostPaymentOperationType {
+  CANCEL
+  REFUND
+}
+
+enum PostPaymentOperationStatus {
+  RUNNING
+  COMPLETED
 }
 
 enum PaymentAttemptStatus {
@@ -160,7 +172,23 @@ model Order {
   lines               OrderLine[]
   attempts            PaymentAttempt[]
   reservations        StockReservation[]
+  postPaymentOperations PostPaymentOperation[]
   @@index([status])
+}
+
+model PostPaymentOperation {
+  id             String                    @id @default(uuid()) @db.Uuid
+  orderId        String                    @db.Uuid
+  type           PostPaymentOperationType
+  status         PostPaymentOperationStatus @default(RUNNING)
+  idempotencyKey String                    @unique
+  providerOrderId String?
+  providerStatus String?
+  createdAt      DateTime                  @default(now())
+  completedAt    DateTime?
+  order          Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@unique([orderId, type])
+  @@index([orderId, status])
 }
 
 model OrderLine {

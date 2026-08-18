@@ -10,7 +10,8 @@
                     "db:seed":  "prisma db seed",
                     "test":  "vitest run",
                     "typecheck":  "tsc --noEmit",
-                    "test:checkout": "vitest run src/lib/checkout/guest-order-service.test.ts src/lib/payments/state-machine.test.ts src/lib/payments/service.test.ts"
+                    "test:checkout": "vitest run src/lib/checkout/guest-order-service.test.ts src/lib/payments/state-machine.test.ts src/lib/payments/service.test.ts",
+                    "e2e:post-payment": "node --experimental-strip-types scripts/e2e/post-payment-sandbox.mts"
                 },
     "prisma":  {
                    "seed":  "node --experimental-strip-types prisma/seed.ts"

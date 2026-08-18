@@ -20,5 +20,22 @@ export async function POST(request: Request) {
 
   const result = await createGuestOrder(input);
   if ("error" in result) return NextResponse.json(result.error, { status: result.error.code === "INVALID_CHECKOUT" ? 400 : 409 });
-  try { const persisted = await reserveOrder(prisma, result.order, hashStatusCapability(randomUUID())); return NextResponse.json({ order: persisted }, { status: 201 }); } catch (error) { if (error instanceof Error && error.message === "STOCK_RESERVATION_UNAVAILABLE") return NextResponse.json({ code: "CATALOG_ITEM_UNAVAILABLE", message: "One or more selected items are unavailable." }, { status: 409 }); throw error; }
+  const statusCapability = randomUUID();
+  try {
+    const persisted = await reserveOrder(prisma, result.order, hashStatusCapability(statusCapability));
+    const order = {
+      id: persisted.id,
+      status: persisted.status,
+      currency: persisted.currency,
+      total: persisted.total,
+      updatedAt: persisted.updatedAt,
+    };
+
+    return NextResponse.json({ order, statusCapability }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "STOCK_RESERVATION_UNAVAILABLE") {
+      return NextResponse.json({ code: "CATALOG_ITEM_UNAVAILABLE", message: "One or more selected items are unavailable." }, { status: 409 });
+    }
+    throw error;
+  }
 }

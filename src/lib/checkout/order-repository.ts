@@ -9,6 +9,9 @@ export type WebhookReceiptInput = { provider: string; applicationId: string; top
 const serializable = { isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel };
 export const RECONCILIATION_POLICY = { maxAttempts: 7, initialBackoffMs: 60_000, maximumBackoffMs: 3_600_000 } as const;
 
+type TerminalStockOperation = "cancel" | "refund";
+type TransactionClient = Prisma.TransactionClient;
+
 /** Persists one validated order and its stock reservation atomically. */
 export async function reserveOrder(prisma: PrismaClient, order: GuestOrder, statusCapabilityHash: string) {
   return prisma.$transaction(async (tx) => {
@@ -35,6 +38,10 @@ async function claimReceipt(prisma: PrismaClient, input: WebhookReceiptInput, no
 }
 
 export async function completeReceiptAndApplyEvidence(prisma: PrismaClient, input: { receiptId: string; attemptId: string; orderId: string; evidence: ProviderOrderEvidence; outcome: "PENDING" | "PAID" | "FAILED"; now?: Date }) {
+  return retrySerializable(() => completeReceiptAndApplyEvidenceOnce(prisma, input));
+}
+
+async function completeReceiptAndApplyEvidenceOnce(prisma: PrismaClient, input: { receiptId: string; attemptId: string; orderId: string; evidence: ProviderOrderEvidence; outcome: "PENDING" | "PAID" | "FAILED"; now?: Date }) {
   const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
     const receipt = await tx.webhookReceipt.findUniqueOrThrow({ where: { id: input.receiptId } });
@@ -42,6 +49,19 @@ export async function completeReceiptAndApplyEvidence(prisma: PrismaClient, inpu
     const attempt = await tx.paymentAttempt.findUniqueOrThrow({ where: { id: input.attemptId } });
     const order = await tx.order.findUniqueOrThrow({ where: { id: input.orderId } });
     if (attempt.orderId !== order.id) throw new Error("ATTEMPT_ORDER_MISMATCH");
+    // Post-payment webhooks are informational after the privileged operation has
+    // already applied its stock transition. Never release/replenish twice.
+    if (order.status === "CANCELLED" || order.status === "REFUNDED") {
+      await tx.webhookReceipt.update({ where: { id: input.receiptId }, data: { state: "PROCESSED", processedAt: now, leaseUntil: null, lastErrorCode: null } });
+      return tx.webhookReceipt.findUniqueOrThrow({ where: { id: input.receiptId } });
+    }
+    const providerAction = input.evidence.status.toLowerCase();
+    if (providerAction === "cancelled" || providerAction === "canceled" || providerAction === "refunded") {
+      await releaseTerminalReservations(tx, { orderId: input.orderId, operation: providerAction === "refunded" ? "refund" : "cancel" });
+      await tx.order.update({ where: { id: input.orderId }, data: { status: providerAction === "refunded" ? "REFUNDED" : "CANCELLED" } });
+      await tx.webhookReceipt.update({ where: { id: input.receiptId }, data: { state: "PROCESSED", processedAt: now, leaseUntil: null, lastErrorCode: null } });
+      return tx.webhookReceipt.findUniqueOrThrow({ where: { id: input.receiptId } });
+    }
     const transition = applyAuthoritativeProviderState({ status: attempt.status === "PAID" ? "PAID" : attempt.status === "FAILED" ? "FAILED" : "PENDING", providerUpdatedAt: attempt.providerUpdatedAt?.toISOString(), orderStatus: attempt.providerOrderStatus ?? undefined, paymentStatus: attempt.providerPaymentStatus ?? undefined }, input.evidence);
     const outcome = transition.state.status;
     if (transition.action === "lookup_and_alert") return tx.webhookReceipt.update({ where: { id: input.receiptId }, data: { state: "RETRYABLE_FAILED", leaseUntil: null, lastErrorCode: transition.alert } });
@@ -51,14 +71,73 @@ export async function completeReceiptAndApplyEvidence(prisma: PrismaClient, inpu
     await tx.order.update({ where: { id: input.orderId }, data: { status: orderStatus } });
     if (outcome === "PAID") await tx.stockReservation.updateMany({ where: { orderId: input.orderId, status: "ACTIVE" }, data: { status: "CONSUMED" } });
     if (outcome === "FAILED") {
-      const reservations = await tx.stockReservation.findMany({ where: { orderId: input.orderId, status: "ACTIVE" } });
-      for (const reservation of reservations) await tx.productVariant.update({ where: { id: reservation.variantId }, data: { stock: { increment: reservation.quantity } } });
-      await tx.stockReservation.updateMany({ where: { orderId: input.orderId, status: "ACTIVE" }, data: { status: "RELEASED" } });
+      await releaseTerminalReservations(tx, { orderId: input.orderId, operation: "cancel" });
     }
     const completed = await tx.webhookReceipt.updateMany({ where: { id: input.receiptId, state: "PROCESSING" }, data: { state: "PROCESSED", processedAt: now, leaseUntil: null, lastErrorCode: null } });
     if (completed.count !== 1) throw new Error("RECEIPT_CLAIM_LOST");
     return tx.webhookReceipt.findUniqueOrThrow({ where: { id: input.receiptId } });
   }, serializable);
+}
+
+/** Repository used by privileged post-payment handlers; route authorization is intentionally external. */
+export function createPrismaPostPaymentRepository(prisma: PrismaClient) {
+  return {
+    async findOperation(orderId: string, operation: "cancel" | "refund") {
+      const value = await prisma.postPaymentOperation.findUnique({ where: { orderId_type: { orderId, type: operation === "cancel" ? "CANCEL" : "REFUND" } } });
+      return value ? { idempotencyKey: value.idempotencyKey, status: value.status } : null;
+    },
+    async createOperation(input: { orderId: string; operation: "cancel" | "refund"; idempotencyKey: string }) {
+      try {
+        const value = await prisma.postPaymentOperation.create({ data: { orderId: input.orderId, type: input.operation === "cancel" ? "CANCEL" : "REFUND", idempotencyKey: input.idempotencyKey } });
+        return { idempotencyKey: value.idempotencyKey, status: value.status };
+      } catch (error) { if (isUnique(error)) throw new Error("UNIQUE_OPERATION_CONFLICT"); throw error; }
+    },
+    async getOrderForOperation(orderId: string) {
+      const order = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true, attempts: { where: { providerOrderId: { not: null } }, select: { providerOrderId: true }, orderBy: { updatedAt: "desc" }, take: 1 } } });
+      if (!order) throw new Error("ORDER_NOT_FOUND");
+      return { status: order.status, providerOrderId: order.attempts[0]?.providerOrderId ?? null };
+    },
+    async completeOperation(orderId: string, operation: "cancel" | "refund", provider: { id: string; status: string }) {
+      await retrySerializable(() => prisma.$transaction(async (tx) => {
+        const current = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+        const target = operation === "cancel" ? "CANCELLED" : "REFUNDED";
+        if (current.status === target) {
+          await tx.postPaymentOperation.update({ where: { orderId_type: { orderId, type: operation === "cancel" ? "CANCEL" : "REFUND" } }, data: { status: "COMPLETED", providerOrderId: provider.id, providerStatus: provider.status, completedAt: new Date() } });
+          return;
+        }
+        if (operation === "cancel" && current.status === "PAID") throw new Error("ORDER_NOT_CANCELLABLE");
+        if (operation === "refund" && current.status !== "PAID") throw new Error("ORDER_NOT_REFUNDABLE");
+        await releaseTerminalReservations(tx, { orderId, operation });
+        await tx.order.update({ where: { id: orderId }, data: { status: target } });
+        await tx.postPaymentOperation.update({ where: { orderId_type: { orderId, type: operation === "cancel" ? "CANCEL" : "REFUND" } }, data: { status: "COMPLETED", providerOrderId: provider.id, providerStatus: provider.status, completedAt: new Date() } });
+      }, serializable));
+    },
+  };
+}
+
+/**
+ * Claims the reservations that still own this order's stock before replenishing
+ * variants. The status condition is the exact-once guard: cancellations release
+ * pre-payment reservations, while refunds replenish reservations consumed by a
+ * confirmed payment.
+ */
+export async function releaseTerminalReservations(tx: TransactionClient, { orderId, operation }: { orderId: string; operation: TerminalStockOperation }) {
+  const expectedStatus = operation === "cancel" ? "ACTIVE" : "CONSUMED";
+  const reservations = await tx.stockReservation.findMany({
+    where: { orderId, status: expectedStatus },
+    select: { id: true, variantId: true, quantity: true },
+  });
+  if (reservations.length === 0) return;
+
+  const claimed = await tx.stockReservation.updateMany({
+    where: { id: { in: reservations.map((reservation) => reservation.id) }, orderId, status: expectedStatus },
+    data: { status: "RELEASED" },
+  });
+  if (claimed.count !== reservations.length) throw new Error("TERMINAL_RESERVATION_CLAIM_CONFLICT");
+
+  for (const reservation of reservations) {
+    await tx.productVariant.update({ where: { id: reservation.variantId }, data: { stock: { increment: reservation.quantity } } });
+  }
 }
 
 export async function leaseDuePaymentAttempts(prisma: PrismaClient, now: Date, limit: number, leaseMs: number) {
@@ -77,6 +156,7 @@ export function createPrismaPaymentRepository(prisma: PrismaClient) {
     async createAttempt(input: { orderId: string; intentId: string; idempotencyKey: string; payloadHash: string }) { try { return await prisma.paymentAttempt.create({ data: input }); } catch (error) { if (isUnique(error)) throw new Error("UNIQUE_ATTEMPT_CONFLICT"); throw error; } },
     async claimDispatch(id: string) { const winner = await prisma.paymentAttempt.updateMany({ where: { id, status: "CREATED" }, data: { status: "DISPATCHING" } }); return winner.count ? prisma.paymentAttempt.findUnique({ where: { id } }) : null; },
     async markPending(id: string) { await prisma.paymentAttempt.update({ where: { id }, data: { status: "PENDING", nextReconcileAt: new Date(), reconcileLeaseUntil: null } }); },
+    async settleProviderEvidence(input: { attemptId: string; evidence: ProviderOrderEvidence; outcome: "PENDING" | "PAID" | "FAILED" }) { const attempt = await prisma.paymentAttempt.findUniqueOrThrow({ where: { id: input.attemptId } }); await completeReceiptFreeOutcome(prisma, attempt.id, attempt.orderId, input.outcome, input.evidence); },
     async markPaidAndConsume(id: string) { const attempt = await prisma.paymentAttempt.findUniqueOrThrow({ where: { id } }); await completeReceiptFreeOutcome(prisma, attempt.id, attempt.orderId, "PAID"); },
     async markFailedAndRelease(id: string) { const attempt = await prisma.paymentAttempt.findUniqueOrThrow({ where: { id } }); await completeReceiptFreeOutcome(prisma, attempt.id, attempt.orderId, "FAILED"); },
     async applyProviderEvidence(input: { attemptId: string; orderId: string; evidence: ProviderOrderEvidence }) { await prisma.paymentAttempt.update({ where: { id: input.attemptId }, data: { providerOrderId: input.evidence.id, providerPaymentId: input.evidence.payment.id, providerOrderStatus: input.evidence.status, providerPaymentStatus: input.evidence.payment.status, providerStatusDetail: input.evidence.statusDetail, providerUpdatedAt: new Date(input.evidence.updatedAt), status: "PENDING", nextReconcileAt: new Date(), reconcileLeaseUntil: null } }); },
@@ -95,7 +175,7 @@ export function createPrismaPaymentRepository(prisma: PrismaClient) {
   };
 }
 
-async function completeReceiptFreeOutcome(prisma: PrismaClient, attemptId: string, orderId: string, outcome: "PAID" | "FAILED") { return prisma.$transaction(async (tx) => { await tx.paymentAttempt.update({ where: { id: attemptId }, data: { status: outcome, reconcileLeaseUntil: null } }); await tx.order.update({ where: { id: orderId }, data: { status: outcome === "PAID" ? "PAID" : "PAYMENT_FAILED" } }); if (outcome === "PAID") await tx.stockReservation.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "CONSUMED" } }); else { const reservations = await tx.stockReservation.findMany({ where: { orderId, status: "ACTIVE" } }); for (const reservation of reservations) await tx.productVariant.update({ where: { id: reservation.variantId }, data: { stock: { increment: reservation.quantity } } }); await tx.stockReservation.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "RELEASED" } }); } }, serializable); }
+async function completeReceiptFreeOutcome(prisma: PrismaClient, attemptId: string, orderId: string, outcome: "PENDING" | "PAID" | "FAILED", evidence?: ProviderOrderEvidence) { return prisma.$transaction(async (tx) => { await tx.paymentAttempt.update({ where: { id: attemptId }, data: { status: outcome, reconcileLeaseUntil: null, nextReconcileAt: outcome === "PENDING" ? new Date() : null, ...(evidence ? { providerOrderId: evidence.id, providerPaymentId: evidence.payment.id, providerOrderStatus: evidence.status, providerPaymentStatus: evidence.payment.status, providerStatusDetail: evidence.statusDetail, providerUpdatedAt: new Date(evidence.updatedAt) } : {}) } }); await tx.order.update({ where: { id: orderId }, data: { status: outcome === "PAID" ? "PAID" : outcome === "FAILED" ? "PAYMENT_FAILED" : "PAYMENT_PENDING" } }); if (outcome === "PAID") await tx.stockReservation.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "CONSUMED" } }); if (outcome === "FAILED") { const reservations = await tx.stockReservation.findMany({ where: { orderId, status: "ACTIVE" } }); for (const reservation of reservations) await tx.productVariant.update({ where: { id: reservation.variantId }, data: { stock: { increment: reservation.quantity } } }); await tx.stockReservation.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "RELEASED" } }); } }, serializable); }
 function pickIdentity(input: WebhookReceiptInput) { return { provider: input.provider, applicationId: input.applicationId, topic: input.topic, notificationId: input.notificationId }; }
 export function reconciliationBackoff(count: number) { return Math.min(RECONCILIATION_POLICY.maximumBackoffMs, RECONCILIATION_POLICY.initialBackoffMs * 2 ** Math.min(count, 6)); }
 function boundedBackoff(count: number) { return reconciliationBackoff(count); }

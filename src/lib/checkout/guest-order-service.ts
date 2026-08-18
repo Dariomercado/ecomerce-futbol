@@ -28,7 +28,7 @@ export async function createGuestOrder(input: unknown): Promise<GuestOrderResult
     const unitPrice = variant?.price ?? product.price;
     const lineTotal = unitPrice * line.quantity;
     if (!Number.isSafeInteger(unitPrice) || !Number.isSafeInteger(lineTotal)) { issues.push({ field: "lines", message: "The requested quantity cannot be processed safely." }); return []; }
-    return [{ ...line, name: variant ? `${product.name} · ${variant.name}` : product.name, unitPrice, lineTotal }];
+    return [{ ...line, name: variant ? `${product.name} Â· ${variant.name}` : product.name, unitPrice, lineTotal }];
   });
   if (issues.length > 0) return { error: { code: "CATALOG_ITEM_UNAVAILABLE", message: "One or more selected items are unavailable.", issues } };
   const total = lines.reduce((sum, line) => sum + line.lineTotal, 0);

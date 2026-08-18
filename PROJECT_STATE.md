@@ -1,28 +1,48 @@
 # Project State
 
 This is the concise operational checkpoint for resuming work. The detailed
-source of truth is `openspec/changes/catalog-products/`.
+source of truth for the payment slice is `openspec/changes/post-payment-operations/`.
+
+## Operating Mode
+
+The repository is using a transparent **ordinary-policy compatibility mode**:
+RDD stays disabled at clone scope, no receipt or native approval may be
+simulated, and lightweight SDD/OpenSpec planning plus delegated implementation
+and ordinary verification remain in use. See
+[`docs/development/gentle-ai-workflow.md`](docs/development/gentle-ai-workflow.md).
+
+The current native SDD attempt-ledger/authority block is a historical
+infrastructure-state limitation, not an application defect. Do not retry
+native `verify` or `archive` until Gentle AI publishes and the environment
+installs a relevant fix, or an authorized maintainer explicitly repairs the
+native authority. Record future native blocks once with bounded evidence; do
+not enter retry loops. `/plan` is optional and is not a workflow precondition.
 
 ## Resume Point
 
-Continue with **Slice 6.2C**. Slices 6.2A and 6.2B, plus the durable Bridge,
-are complete. The 6.2B snapshot was approved by Gentle AI RDD 2.3 and delivered
-in commit `18100af`; 6.2C is the next technical slice and 6.2D follows it.
+The payment implementation is functionally complete, but the
+`post-payment-operations` change is not formally archived yet. Continue under
+ordinary repository policy; retain truthful verification evidence and do not
+claim a native archive result while its authority remains blocked.
 
 | Item | Current state |
 | --- | --- |
 | Latest payment-core commit | `18100af` - `feat(payments): complete payment core and checkout bridge` |
 | Slice 6.2A | Complete |
-| Slice 6.2B | Complete; RDD `APPROVED`, receipt `sha256:f3e64bea8a2ae06fe8b01f952ee528258ecf5e22b80fdcb402865b97c7da8173` |
+| Slice 6.2B | Complete; historical RDD approval exists, but RDD is currently disabled |
 | Bridge | Complete; durable reconciliation compatibility foundation |
-| Native SDD status | 13/20 complete; 7 future tasks remain in the global change |
-| Next SDD work | Slice 6.2C: payment routes, webhooks, and reconciliation |
+| Post-payment operations | Functionally complete; OpenSpec tasks 15/15, sandbox E2E 4.4 completed |
+| Formal verification | Historical `verify-report.md` is stale FAIL 9/10; remediation passes ordinary tests, but native refresh/archive is blocked by historical authority state |
+| RDD mode | Disabled at clone scope; do not enable, simulate, or substitute receipts |
+| Operational workflow | Lightweight SDD/OpenSpec planning + delegated implementation + Vitest/lint/typecheck/build/E2E under ordinary policy |
+| Native retry criterion | Published and installed Gentle AI fix, or explicit authorized authority repair |
+| Next product slice | Remaining Slice 6.2C: payment routes, webhooks, and reconciliation gaps |
 | Later SDD work | Slice 6.2D: CardForm, tokenization, 3DS, and final UI |
 | Catalog UI data source | Home, catalog, and detail use public catalog data |
 | Authentication decision | Supabase Auth only; implementation is a future slice |
 | Commercial data | Prisma + PostgreSQL remain authoritative |
 | Checkout identity | Guest checkout allowed; customer identity is optional |
-| Automated tests | No test runner is configured |
+| Automated tests | Vitest is configured; latest ordinary verification: 157 tests passed, typecheck/build pass, lint 0 errors/2 warnings |
 
 ## Current Implementation
 
@@ -38,9 +58,15 @@ in commit `18100af`; 6.2C is the next technical slice and 6.2D follows it.
   persistence foundation.
 - Slice 6.2B provides the Mercado Pago payment core, state machine, gateway,
   idempotency, replay handling, and provider-safe outcomes.
-- Bridge provides durable receipt/evidence storage, leases, reservation
-  transitions, and server-only provider order lookup. 6.2C routes/webhooks and
-  6.2D CardForm/3DS/UI are not implemented yet.
+- Bridge provides durable reconciliation support, leases, reservation
+  transitions, and server-only provider order lookup.
+- `post-payment-operations` adds payment routes, webhooks, cancellation/refund
+  transitions, idempotency, and the sandbox refund proof. The focused PAID
+  cancellation test now covers `422 ORDER_NOT_CANCELLABLE` with zero provider
+  calls.
+- Remaining 6.2C work is the product-level route/webhook/reconciliation
+  follow-through after this change is formally closed. 6.2D CardForm,
+  tokenization, 3DS, and final UI remain later work.
 
 ## Scope Boundaries
 

@@ -118,3 +118,19 @@ Coverage: not configured; no coverage threshold applies.
 **FAIL**
 
 All current commands pass and the implementation is statically coherent, but one required lifecycle scenario lacks complete passing runtime coverage. Archive is not recommended until that focused test exists and formal verification is rerun.
+
+## Ordinary-Policy Addendum (2026-08-18)
+
+This addendum records current ordinary-policy evidence only; it does **not**
+modify the historical snapshot verdict, metrics, or evidence hashes above.
+
+- The post-payment OpenSpec tasks are complete: **15/15**.
+- Current ordinary verification reports **21 test files / 165 tests passing**,
+  TypeScript typecheck passing, and lint with **0 errors / 2 warnings**.
+- The focused PAID-cancellation coverage now verifies
+  `422 ORDER_NOT_CANCELLABLE` with zero provider calls, so the historical
+  missing-scenario finding is stale.
+- Native `verify` refresh and `archive` remain blocked by the historical
+  authority state; no native PASS or archive result is claimed here.
+- Real scheduler wiring remains pending deployment-provider selection, not
+  application payment-route implementation.

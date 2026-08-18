@@ -30,19 +30,20 @@ claim a native archive result while its authority remains blocked.
 | Latest payment-core commit | `18100af` - `feat(payments): complete payment core and checkout bridge` |
 | Slice 6.2A | Complete |
 | Slice 6.2B | Complete; historical RDD approval exists, but RDD is currently disabled |
+| Slice 6.2C | Complete; application boundary covers payment routes, webhooks, and reconciliation |
+| Slice 6.2D | Already implemented: CardForm, tokenization, 3DS, and checkout UI |
 | Bridge | Complete; durable reconciliation compatibility foundation |
-| Post-payment operations | Functionally complete; OpenSpec tasks 15/15, sandbox E2E 4.4 completed |
-| Formal verification | Historical `verify-report.md` is stale FAIL 9/10; remediation passes ordinary tests, but native refresh/archive is blocked by historical authority state |
+| Post-payment operations | Functionally complete; OpenSpec tasks 15/15, including sandbox E2E task 4.4 |
+| Ordinary verification | 21 test files / 165 tests passing; typecheck passes; lint has 0 errors / 2 warnings |
+| Formal verification | `verify-report.md` remains a historical, stale FAIL (9/10 snapshot); native refresh and archive remain blocked by authority state |
 | RDD mode | Disabled at clone scope; do not enable, simulate, or substitute receipts |
 | Operational workflow | Lightweight SDD/OpenSpec planning + delegated implementation + Vitest/lint/typecheck/build/E2E under ordinary policy |
 | Native retry criterion | Published and installed Gentle AI fix, or explicit authorized authority repair |
-| Next product slice | Remaining Slice 6.2C: payment routes, webhooks, and reconciliation gaps |
-| Later SDD work | Slice 6.2D: CardForm, tokenization, 3DS, and final UI |
+| Next product work | Real scheduler wiring after deployment-provider selection; application route code is not missing |
 | Catalog UI data source | Home, catalog, and detail use public catalog data |
 | Authentication decision | Supabase Auth only; implementation is a future slice |
 | Commercial data | Prisma + PostgreSQL remain authoritative |
 | Checkout identity | Guest checkout allowed; customer identity is optional |
-| Automated tests | Vitest is configured; latest ordinary verification: 157 tests passed, typecheck/build pass, lint 0 errors/2 warnings |
 
 ## Current Implementation
 
@@ -60,16 +61,15 @@ claim a native archive result while its authority remains blocked.
   idempotency, replay handling, and provider-safe outcomes.
 - Bridge provides durable reconciliation support, leases, reservation
   transitions, and server-only provider order lookup.
-- `post-payment-operations` adds payment routes, webhooks, cancellation/refund
-  transitions, idempotency, and the sandbox refund proof. The focused PAID
-  cancellation test now covers `422 ORDER_NOT_CANCELLABLE` with zero provider
-  calls.
-- Remaining 6.2C work is the product-level route/webhook/reconciliation
-  follow-through after this change is formally closed. 6.2D CardForm,
-  tokenization, 3DS, and final UI remain later work.
+- Slice 6.2C provides payment routes, webhooks, cancellation/refund
+  transitions, idempotency, and sandbox refund proof. The focused PAID
+  cancellation test covers `422 ORDER_NOT_CANCELLABLE` with zero provider calls.
+- Slice 6.2D is implemented: CardForm, tokenization, 3DS, and checkout UI.
+- The remaining scheduler work is deployment integration: select the provider
+  and wire the real scheduler. It is not missing application route code.
 
 ## Scope Boundaries
 
 - Keep public catalog APIs read-only.
-- Do not begin 6.2D before 6.2C is complete and separately authorized.
+- Preserve the deployment-provider decision before wiring a real scheduler.
 - Checkout must work without authentication when it is implemented.

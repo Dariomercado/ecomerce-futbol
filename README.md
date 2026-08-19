@@ -1,59 +1,35 @@
 ﻿# Ecomerce Futbol
 
-Ecomerce Futbol is a UI-first football ecommerce portfolio project evolving
-through reviewable slices. The repository has the storefront foundation, Prisma
-with local PostgreSQL, repeatable catalog seed data, and public read-only
-catalog APIs.
+Ecomerce Futbol is a football ecommerce portfolio application with a public catalog, guest checkout, durable orders, and a production-oriented Mercado Pago payment lifecycle.
 
-The next work is the API-backed UI. Cart, guest checkout, Mercado Pago,
-Supabase Auth, and authenticated admin authorization remain future slices.
+## Stack
 
-## Current foundation
-
-| Area | Status |
+| Area | Implementation |
 | --- | --- |
-| Git | Initialized |
-| Framework | Next.js 16.2.9 |
-| Router | App Router |
-| Source directory | `src/` |
-| Language | TypeScript |
-| Styling | Tailwind CSS |
-| UI foundation | shadcn/ui foundation installed |
-| Theme support | `next-themes` installed |
-| Design system | Foundation in use |
-| Linting | ESLint configured |
-| Package manager | pnpm |
-| Lockfile | `pnpm-lock.yaml` committed with the project |
-| Catalog persistence | Prisma + local PostgreSQL |
-| Public catalog API | Implemented under `/api/catalog/*` |
-| Authentication | Supabase Auth selected; not configured |
+| App | Next.js 16 App Router, TypeScript, Tailwind CSS |
+| Commerce data | Prisma + PostgreSQL |
+| Catalog | Public read-only catalog APIs powering home, catalog, and product detail views |
+| Checkout | Cart, guest checkout, and persisted orders; accounts are optional |
+| Payments | Mercado Pago tokenization, 3DS, payment state machine, idempotency, and provider-safe outcomes |
+| Operations | Signed webhooks, cancellation/refund flows, and post-payment reconciliation |
+| Authentication | Supabase Auth selected, but not yet configured |
 
-## Catalog-products status
+## Payment operations
 
-Slices 1 through 3 are implemented and committed. Current task-ledger progress
-is **25/36 complete, 11 pending, with no blockers**.
+The payment core handles checkout-to-order persistence and provider state changes. Webhook signatures are verified before processing, and reconciliation protects against delayed or missed provider updates. Cancellation and refund paths are idempotent and include provider-safe state transitions.
 
-| Scope | Status |
-| --- | --- |
-| Data foundation | Done with local mock data |
-| `ProductCard` / `ProductGrid` / `CatalogEmptyState` | Done |
-| `/catalogo` | Done with mock filters |
-| `/productos/[slug]` | Done with mock detail data |
-| Navigation toward `/catalogo` | Done |
-| Prisma schema and migration | Done |
-| Product seed | Done and repeatable |
-| Public catalog API | Done |
-| Home featured products API-backed | Next: Work Unit 4A |
-| Catalog/detail API-backed | Pending: Work Unit 4B |
+A GitHub Actions workflow invokes the reconciliation endpoint every five minutes and can also be run manually. It requires repository secrets for the endpoint URL and cron authorization token; secrets are never committed.
 
-Not present yet:
+## Quality evidence
 
-- Real cart
-- Guest checkout and order persistence
-- Mercado Pago
-- Supabase Auth
-- Authenticated admin authorization and admin UI
-- Automated tests
+Current ordinary-policy verification evidence:
+
+- 165 tests passing across 21 test files
+- Typecheck passing
+- Production build passing
+- ESLint: 0 errors, 2 warnings
+
+The repository runs with RDD disabled at clone scope, using the ordinary-policy compatibility workflow instead: lightweight OpenSpec planning, delegated implementation, and standard test/build/lint evidence. Historical native SDD verification is stale and its archive is blocked by authority infrastructure, so this README does **not** claim a native SDD archive PASS. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current operational checkpoint.
 
 ## Quick start
 
@@ -62,50 +38,31 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Project scripts
+Configure local environment variables for PostgreSQL, Mercado Pago, and the reconciliation endpoint before exercising payment operations. Keep all credentials in local environment files or deployment secrets.
+
+## Scripts
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm dev` | Start the local Next.js dev server |
-| `pnpm build` | Build the production app |
-| `pnpm start` | Start the production server after build |
+| `pnpm dev` | Start the Next.js development server |
+| `pnpm build` | Create a production build |
+| `pnpm start` | Run the production server |
 | `pnpm lint` | Run ESLint |
+| `pnpm typecheck` | Run TypeScript without emitting files |
+| `pnpm test` | Run the Vitest suite |
+| `pnpm test:checkout` | Run focused checkout and payment tests |
+| `pnpm e2e:post-payment` | Run the post-payment sandbox scenario |
+| `pnpm db:seed` | Seed the Prisma database |
 
-## Documentation map
+## Deployment
 
-| File | Purpose |
-| --- | --- |
-| `PROJECT_STATE.md` | Current real workspace state and guardrails |
-| `PROJECT_VISION.md` | Product direction and scope boundaries |
-| `PLAN.md` | Delivery phases |
-| `ARCHITECTURE_DECISIONS.md` | Architecture decisions and tradeoffs |
-| `DESIGN_SYSTEM.md` | Visual system direction |
-| `BRAND_GUIDE.md` | Brand foundations |
-| `CONTENT_STRATEGY.md` | Content and copy direction |
-| `CATALOG_DESIGN.md` | Catalog model and merchandising plan |
-| `UI_ROADMAP.md` | Planned UI screens and sections |
-| `FOLDER_STRUCTURE.md` | Proposed application structure |
-| `ENVIRONMENTS.md` | Environment strategy |
-| `TESTING_STRATEGY.md` | Testing direction |
-| `SITEMAP.md` | Route plan |
-| `USER_FLOWS.md` | Main user journeys |
-| `MOCK_DATA_STRATEGY.md` | Mock data strategy |
+The selected deployment target is Netlify. GitHub Actions owns the scheduled reconciliation trigger and will call the deployed endpoint using repository secrets after the first production deployment. Set deployment configuration in the hosting platform and GitHub repository settings; never commit secret values.
 
-## Current guardrails
+## Documentation
 
-- Preserve existing UI contracts while Work Units 4A and 4B replace mock reads
-  with public API reads.
-- Keep public catalog routes read-only.
-- Use Supabase for authentication only; keep catalog, cart, order, and other
-  commercial data in Prisma + PostgreSQL.
-- Guest checkout is required. Customer accounts are optional, and an order may
-  optionally reference an authenticated Supabase user.
-- Authentication does not imply admin authorization. Implement admin only after
-  both boundaries are present.
-- Do not add cart, checkout, Mercado Pago, Auth, or admin behavior before its
-  planned slice.
-
-The next step for `catalog-products` is Slice 4, Work Unit 4A: connect the home
-featured-products section to the public API.
+- [PROJECT_STATE.md](PROJECT_STATE.md) — current workspace state, verification caveat, and resumption guidance
+- [PROJECT_VISION.md](PROJECT_VISION.md) — product direction and scope
+- [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) — architecture choices and tradeoffs
+- [TESTING_STRATEGY.md](TESTING_STRATEGY.md) — test approach

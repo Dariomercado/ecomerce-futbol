@@ -1,0 +1,42 @@
+name: Reconcile payments
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reconcile-payments
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RECONCILIATION_ENDPOINT_URL: ${{ secrets.RECONCILIATION_ENDPOINT_URL }}
+      RECONCILIATION_CRON_SECRET: ${{ secrets.RECONCILIATION_CRON_SECRET }}
+    steps:
+      - name: Validate scheduler configuration
+        shell: bash
+        run: |
+          if [[ -z "${RECONCILIATION_ENDPOINT_URL:-}" || -z "${RECONCILIATION_CRON_SECRET:-}" ]]; then
+            echo "::error::Required reconciliation configuration is missing."
+            exit 1
+          fi
+
+      - name: Invoke reconciliation endpoint
+        shell: bash
+        run: |
+          curl --request POST \
+            --fail \
+            --silent \
+            --show-error \
+            --output /dev/null \
+            --connect-timeout 15 \
+            --max-time 210 \
+            --header "Authorization: Bearer ${RECONCILIATION_CRON_SECRET}" \
+            "${RECONCILIATION_ENDPOINT_URL}"

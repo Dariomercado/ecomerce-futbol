@@ -15,7 +15,8 @@ configured yet.
 | Auth provider | Supabase Auth selected; not configured |
 | Database provider | PostgreSQL through Prisma; configured locally |
 | Payment provider | Mercado Pago selected; not configured |
-| Deployment provider | Not selected |
+| App deployment provider | Netlify selected |
+| Reconciliation scheduler | GitHub Actions selected; invokes the deployed internal endpoint every five minutes |
 
 ## Local development
 
@@ -45,6 +46,11 @@ Current `.gitignore` behavior:
 
 ## Integration boundaries
 
+- Netlify is the selected application deployment target. Its deployment secret
+  manager must provide all required server-only application variables.
+- GitHub Actions is the selected reconciliation scheduler. It calls the deployed
+  Netlify endpoint with repository secrets and never stores those values in the
+  workflow file.
 - Supabase will provide authentication only. Its environment variables are
   added in the dedicated authentication slice, not during documentation
   reconciliation.
@@ -53,5 +59,4 @@ Current `.gitignore` behavior:
 - Checkout must support guests; a Supabase identity is optional for an order.
 - Admin access requires both Supabase authentication and application
   authorization.
-- Mercado Pago and production deployment configuration remain deferred to their
-  planned slices.
+- Mercado Pago production configuration remains deferred to its planned slice.

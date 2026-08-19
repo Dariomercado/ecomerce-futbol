@@ -53,6 +53,33 @@ Invoke-WebRequest -Method Post -Uri "https://app.example.com/api/internal/paymen
 
 Inject `RECONCILIATION_CRON_SECRET` directly into the scheduler's process from the approved secret manager. Do not place its value in a scheduler definition, command history, logs, source control, or `.env` file. Missing or malformed credentials return `401 RECONCILIATION_AUTH_REQUIRED`; a wrong token returns `403 RECONCILIATION_AUTH_INVALID`; an unset scheduler secret returns `503 RECONCILIATION_AUTH_UNAVAILABLE`. These checks run before payment configuration, attempt leasing, repository creation, or Mercado Pago gateway construction. A valid call leases at most one bounded page of due attempts and performs provider lookups through the normal reconciliation flow.
 
+## GitHub Actions scheduler setup
+
+The committed workflow `.github/workflows/reconcile-payments.yml` is the selected
+scheduler. GitHub evaluates `*/5 * * * *` in UTC and may delay scheduled runs
+under platform load. It also provides `workflow_dispatch` for a deliberate,
+manually triggered run. Its concurrency group does not cancel an in-progress
+reconciliation; it queues the next eligible run instead, preventing overlap.
+
+Configure the GitHub repository secrets exactly as follows:
+
+1. Open the repository in GitHub, then go to **Settings** > **Secrets and variables** > **Actions**.
+2. Select **New repository secret** and create `RECONCILIATION_ENDPOINT_URL`. Set its value to the deployed Netlify HTTPS endpoint, for example `https://<site>.netlify.app/api/internal/payments/reconcile`.
+3. Select **New repository secret** again and create `RECONCILIATION_CRON_SECRET`. Set its value to the same high-entropy server-only value injected into the Netlify application as `RECONCILIATION_CRON_SECRET`.
+4. Confirm the Netlify deployment has its own `RECONCILIATION_CRON_SECRET` environment variable. Do not use `POST_PAYMENT_ADMIN_TOKEN` for either secret.
+5. Trigger **Reconcile payments** through the Actions tab only after the endpoint is deployed and the normal operational approval process permits it.
+
+The workflow fails closed before sending a request if either GitHub secret is
+missing. It sends one POST request with the cron secret only in the Bearer
+header, has a 15-second connection timeout and a 210-second total curl timeout,
+and discards the response body. Do not enable verbose curl output or echo either
+environment variable: workflow logs must not expose secrets or the endpoint URL.
+
+When rotating the reconciliation secret, update the Netlify environment variable
+and the GitHub repository secret together, then redeploy the application before
+triggering a run. If a scheduled run fails, inspect only its HTTP outcome and
+redacted GitHub Actions metadata; do not copy request headers, secret values, or
+response bodies into tickets or logs.
 ## Rotate or disable access
 
 The temporary adapter accepts one configured token at a time.

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { featuredCategories } from "@/components/home/home-data";
 
 export function FeaturedCategories() {
@@ -22,7 +23,16 @@ export function FeaturedCategories() {
               href={category.href}
               className="group overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:border-primary/40"
             >
-              <div className={`h-32 bg-gradient-to-br ${category.accent}`} />
+              <div className="relative h-32 overflow-hidden bg-surface">
+                <CatalogImage
+                  alt={category.imageAlt}
+                  className="object-cover transition duration-300 group-hover:scale-105"
+                  fallbackLabel={category.name}
+                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                  src={category.imageUrl}
+                />
+                <div aria-hidden className={`absolute inset-0 bg-gradient-to-br ${category.accent} opacity-25`} />
+              </div>
               <div className="space-y-2 p-4 sm:space-y-3 sm:p-5">
                 <h3 className="font-heading text-lg font-semibold sm:text-xl">
                   {category.name}

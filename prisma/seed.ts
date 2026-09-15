@@ -11,7 +11,7 @@ const categories = [
     name: "Botines",
     slug: "botines",
     description: "Calzado preparado para dominar distintos tipos de cancha.",
-    imageUrl: "/catalog/categories/botines.jpg",
+    imageUrl: "/catalog/categories/botines.png",
     parentId: null,
     isActive: true,
   },
@@ -19,7 +19,7 @@ const categories = [
     name: "Camisetas",
     slug: "camisetas",
     description: "Camisetas de fútbol con identidad de club y entrenamiento.",
-    imageUrl: "/catalog/categories/camisetas.jpg",
+    imageUrl: "/catalog/categories/camisetas.png",
     parentId: null,
     isActive: true,
   },
@@ -27,7 +27,7 @@ const categories = [
     name: "Entrenamiento",
     slug: "entrenamiento",
     description: "Indumentaria técnica para sesiones, pretemporada y día a día.",
-    imageUrl: "/catalog/categories/entrenamiento.jpg",
+    imageUrl: "/catalog/categories/entrenamiento.png",
     parentId: null,
     isActive: true,
   },
@@ -35,7 +35,7 @@ const categories = [
     name: "Accesorios",
     slug: "accesorios",
     description: "Complementos para completar el bolso de partido.",
-    imageUrl: "/catalog/categories/accesorios.jpg",
+    imageUrl: "/catalog/categories/accesorios.png",
     parentId: null,
     isActive: true,
   },
@@ -130,8 +130,8 @@ const products: SeedProduct[] = [
       { name: "Verde / 41 / FG", size: "41", color: "Verde", surface: "FG", stock: 2, price: 115000, sku: "AC-FG-VER-41", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/control-fg-verde-1.jpg", alt: "Botines Control FG Verde vista lateral", position: 1, isPrimary: true },
-      { variantSku: null, url: "/catalog/products/control-fg-verde-2.jpg", alt: "Detalle de suela FG de botines Control Verde", position: 2, isPrimary: false },
+      { variantSku: null, url: "/catalog/products/control-fg-verde-1.png", alt: "Botines Control FG Verde vista lateral", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/control-fg-verde-2.png", alt: "Detalle de suela FG de botines Control Verde", position: 2, isPrimary: false },
     ],
   },
   {
@@ -150,7 +150,7 @@ const products: SeedProduct[] = [
       { name: "Arena / 42 / TF", size: "42", color: "Arena", surface: "TF", stock: 0, price: null, sku: "TE-TF-ARE-42", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/terreno-tf-arena-1.jpg", alt: "Botines Terreno TF Arena color arena", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/terreno-tf-arena-1.png", alt: "Botines Terreno TF Arena color arena", position: 1, isPrimary: true },
     ],
   },
   {
@@ -170,8 +170,8 @@ const products: SeedProduct[] = [
       { name: "Verde / L", size: "L", color: "Verde", surface: null, stock: 5, price: null, sku: "VA-CAM-LOC-L", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/camiseta-verde-arena-local-1.jpg", alt: "Camiseta Verde Arena local frente", position: 1, isPrimary: true },
-      { variantSku: null, url: "/catalog/products/camiseta-verde-arena-local-2.jpg", alt: "Camiseta Verde Arena local espalda", position: 2, isPrimary: false },
+      { variantSku: null, url: "/catalog/products/camiseta-verde-arena-local-1.png", alt: "Camiseta Verde Arena local frente", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/camiseta-verde-arena-local-2.png", alt: "Camiseta Verde Arena local espalda", position: 2, isPrimary: false },
     ],
   },
   {
@@ -190,7 +190,7 @@ const products: SeedProduct[] = [
       { name: "Negro / XL", size: "XL", color: "Negro", surface: null, stock: 2, price: null, sku: "MS-CAM-NEG-XL", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/camiseta-matchday-negra-1.jpg", alt: "Camiseta Matchday negra frente", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/camiseta-matchday-negra-1.png", alt: "Camiseta Matchday negra frente", position: 1, isPrimary: true },
     ],
   },
   {
@@ -209,7 +209,7 @@ const products: SeedProduct[] = [
       { name: "Verde oscuro / L", size: "L", color: "Verde oscuro", surface: null, stock: 4, price: null, sku: "NL-JAC-VER-L", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/northline-training-jacket-1.jpg", alt: "Campera Northline Training verde oscuro", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/northline-training-jacket-1.png", alt: "Campera Northline Training verde oscuro", position: 1, isPrimary: true },
     ],
   },
   {
@@ -227,7 +227,7 @@ const products: SeedProduct[] = [
       { name: "Naranja / Único", size: "Único", color: "Naranja", surface: null, stock: 12, price: null, sku: "TE-CON-NAR-U", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/conos-terreno-pack-1.jpg", alt: "Pack de conos Terreno color naranja", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/conos-terreno-pack-1.png", alt: "Pack de conos Terreno color naranja", position: 1, isPrimary: true },
     ],
   },
   {
@@ -245,7 +245,7 @@ const products: SeedProduct[] = [
       { name: "Humo / Único", size: "Único", color: "Humo", surface: null, stock: 10, price: null, sku: "MS-BOT-HUM-U", isActive: true },
     ],
     images: [
-      { variantSku: null, url: "/catalog/products/botella-matchday-1.jpg", alt: "Botella deportiva Matchday Studio color humo", position: 1, isPrimary: true },
+      { variantSku: null, url: "/catalog/products/botella-matchday-1.png", alt: "Botella deportiva Matchday Studio color humo", position: 1, isPrimary: true },
     ],
   },
   {

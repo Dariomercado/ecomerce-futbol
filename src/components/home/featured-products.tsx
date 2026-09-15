@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import type { ProductSummary } from "@/lib/catalog/public-contracts";
 
 const featuredProductsUrl = "/api/catalog/featured-products";
@@ -12,8 +13,6 @@ const priceFormatter = new Intl.NumberFormat("es-AR", {
   currency: "ARS",
   maximumFractionDigits: 0,
 });
-
-const productPalettes = ["bg-primary", "bg-premium", "bg-secondary"];
 
 export function FeaturedProducts() {
   const [products, setProducts] = useState<ProductSummary[]>([]);
@@ -103,20 +102,24 @@ export function FeaturedProducts() {
           ) : null}
 
           {status === "success"
-            ? products.map((product, index) => (
+            ? products.map((product) => (
                 <Link
                   key={product.id}
                   href="/catalogo?featured=true"
                   className="group rounded-3xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-1 hover:border-primary/40"
                 >
-                  <div
-                    className={`relative h-64 overflow-hidden rounded-2xl ${productPalettes[index % productPalettes.length]}`}
-                  >
+                  <div className="relative h-64 overflow-hidden rounded-2xl bg-surface">
+                    <CatalogImage
+                      alt={product.primaryImage?.alt ?? product.name}
+                      className="object-cover transition duration-300 group-hover:scale-105"
+                      fallbackLabel={product.name}
+                      sizes="(min-width: 768px) 33vw, 100vw"
+                      src={product.primaryImage?.url}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-primary/55 to-transparent" />
                     <div className="absolute left-5 top-5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
                       {product.brand.name}
                     </div>
-                    <div className="absolute inset-x-8 bottom-8 h-28 rounded-full border border-primary-foreground/45" />
-                    <div className="absolute bottom-10 left-1/2 h-32 w-4 -translate-x-1/2 rounded-full bg-primary-foreground/80" />
                   </div>
 
                   <div className="space-y-3 p-2 pt-4">

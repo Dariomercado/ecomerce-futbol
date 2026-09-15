@@ -1,5 +1,6 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import type { ProductSummary } from "@/lib/catalog/public-contracts";
 
 const priceFormatter = new Intl.NumberFormat("es-AR", {
@@ -25,15 +26,13 @@ export function ProductCard({ product }: ProductCardProps) {
         className="block focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <div className="relative aspect-[4/3] overflow-hidden bg-surface">
-          <div
-            aria-label={product.primaryImage?.alt ?? product.name}
-            className="flex size-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.18),transparent_35%),linear-gradient(135deg,hsl(var(--muted)),hsl(var(--surface)))] text-center"
-            role="img"
-          >
-            <span className="px-6 font-heading text-lg font-bold text-muted-foreground/70 transition group-hover:scale-105">
-              {product.name}
-            </span>
-          </div>
+          <CatalogImage
+            alt={product.primaryImage?.alt ?? product.name}
+            className="object-cover transition duration-300 group-hover:scale-105"
+            fallbackLabel={product.name}
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            src={product.primaryImage?.url}
+          />
           {onSale ? (
             <span className="absolute left-4 top-4 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary-foreground">
               Oferta

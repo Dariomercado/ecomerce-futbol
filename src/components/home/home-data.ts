@@ -4,6 +4,8 @@ export const featuredCategories = [
     description:
       "Modelos para césped natural, sintético y juego urbano con ritmo de partido.",
     href: "/catalogo?category=botines",
+    imageUrl: "/catalog/categories/botines.png",
+    imageAlt: "Botines de fútbol para cancha",
     accent: "from-primary/80 to-secondary/80",
   },
   {
@@ -11,6 +13,8 @@ export const featuredCategories = [
     description:
       "Siluetas limpias para entrenar, jugar entre amigos o alentar desde la tribuna.",
     href: "/catalogo?category=camisetas",
+    imageUrl: "/catalog/categories/camisetas.png",
+    imageAlt: "Camisetas de fútbol Verde Arena",
     accent: "from-premium to-secondary",
   },
   {
@@ -18,6 +22,8 @@ export const featuredCategories = [
     description:
       "Prendas versátiles para sesiones intensas, calentamiento y recuperación.",
     href: "/catalogo?category=entrenamiento",
+    imageUrl: "/catalog/categories/entrenamiento.png",
+    imageAlt: "Indumentaria para entrenamiento de fútbol",
     accent: "from-secondary to-primary/70",
   },
   {
@@ -25,6 +31,8 @@ export const featuredCategories = [
     description:
       "Agarre, espinilleras, botellas y detalles funcionales para completar el equipo.",
     href: "/catalogo?category=accesorios",
+    imageUrl: "/catalog/categories/accesorios.png",
+    imageAlt: "Accesorios de fútbol para entrenamiento",
     accent: "from-accent to-primary/60",
   },
 ];

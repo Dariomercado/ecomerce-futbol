@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { Button } from "@/components/ui/button";
 
 export function HomeHero() {
@@ -31,12 +32,15 @@ export function HomeHero() {
           </div>
         </div>
 
-        <div className="relative min-h-[320px] min-w-0 rounded-[1.75rem] border border-border bg-background p-3 shadow-sm sm:min-h-[360px] sm:rounded-[2rem] sm:p-4">
-          <div className="absolute inset-4 rounded-[1.5rem] bg-premium" />
-          <div className="absolute inset-x-8 top-8 h-28 rounded-full border border-accent/50" />
-          <div className="absolute left-1/2 top-8 h-[calc(100%-4rem)] w-px bg-accent/40" />
-          <div className="absolute left-1/2 top-1/2 size-32 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/60" />
-          <div className="absolute bottom-8 left-8 right-8 h-28 rounded-full border border-accent/50" />
+        <div className="relative min-h-[320px] min-w-0 overflow-hidden rounded-[1.75rem] border border-border bg-background p-3 shadow-sm sm:min-h-[360px] sm:rounded-[2rem] sm:p-4">
+          <CatalogImage
+            alt="Tienda Verde Arena con indumentaria y accesorios de fútbol"
+            className="object-cover"
+            priority
+            sizes="(min-width: 1024px) 45vw, 100vw"
+            src="/catalog/hero/football-store.png"
+          />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-primary/85 via-primary/35 to-transparent" />
 
           <div className="relative z-10 flex h-full min-h-[296px] min-w-0 flex-col justify-between rounded-[1.5rem] p-5 text-primary-foreground sm:min-h-[328px] sm:p-8">
             <div className="w-fit rounded-full bg-accent px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-accent-foreground sm:tracking-[0.2em]">

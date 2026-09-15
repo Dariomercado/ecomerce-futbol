@@ -18,10 +18,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: "INVALID_CHECKOUT", message: "Invalid checkout data.", issues: [{ field: "body", message: "Request body must be valid JSON." }] }, { status: 400 });
   }
 
-  const result = await createGuestOrder(input);
-  if ("error" in result) return NextResponse.json(result.error, { status: result.error.code === "INVALID_CHECKOUT" ? 400 : 409 });
-  const statusCapability = randomUUID();
   try {
+    const result = await createGuestOrder(input);
+    if ("error" in result) return NextResponse.json(publicCheckoutError(result.error), { status: result.error.code === "INVALID_CHECKOUT" ? 400 : 409 });
+    const statusCapability = randomUUID();
     const persisted = await reserveOrder(prisma, result.order, hashStatusCapability(statusCapability));
     const order = {
       id: persisted.id,
@@ -36,6 +36,18 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "STOCK_RESERVATION_UNAVAILABLE") {
       return NextResponse.json({ code: "CATALOG_ITEM_UNAVAILABLE", message: "One or more selected items are unavailable." }, { status: 409 });
     }
-    throw error;
+    return unavailable();
   }
+}
+
+function publicCheckoutError(error: { code: "INVALID_CHECKOUT" | "CATALOG_ITEM_UNAVAILABLE"; message: string; issues: Array<{ field: string; message: string }> }) {
+  return {
+    code: error.code,
+    message: error.code === "INVALID_CHECKOUT" ? "Invalid checkout data." : "One or more selected items are unavailable.",
+    issues: error.issues.map(({ field, message }) => ({ field, message })),
+  };
+}
+
+function unavailable() {
+  return NextResponse.json({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout is temporarily unavailable." }, { status: 500 });
 }

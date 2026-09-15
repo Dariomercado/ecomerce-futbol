@@ -65,7 +65,7 @@ describe("checkout API routes", () => {
     expect(publicPaymentConfig).toHaveBeenCalledWith(expect.objectContaining({ accessToken: "server-secret" }));
   });
 
-  it("persists a created order with a hashed capability and returns the one-time capability", async () => {
+  it("allows guest checkout without a session and returns a hashed one-time capability", async () => {
     createGuestOrder.mockResolvedValue({ order: { id: order.id } });
     reserveOrder.mockResolvedValue(persistedOrder);
     const { POST } = await import("./orders/route");
@@ -85,6 +85,16 @@ describe("checkout API routes", () => {
     });
     expect(hashStatusCapability).toHaveBeenCalledWith(expect.any(String));
     expect(reserveOrder).toHaveBeenCalledWith(expect.anything(), { id: order.id }, expect.stringMatching(/^hash:/));
+  });
+
+  it("returns a stable safe error when order creation infrastructure fails", async () => {
+    createGuestOrder.mockRejectedValue(new Error("database password: secret"));
+    const { POST } = await import("./orders/route");
+
+    const response = await POST(new Request("http://localhost/api/checkout/orders", { method: "POST", body: JSON.stringify(validInput) }));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout is temporarily unavailable." });
   });
 
   it("returns a minimal order status only when the matching capability is supplied", async () => {
@@ -109,6 +119,16 @@ describe("checkout API routes", () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ code: "ORDER_NOT_FOUND", message: "Order not found." });
+  });
+
+  it("returns a stable safe error when order status infrastructure fails", async () => {
+    findUnique.mockRejectedValue(new Error("database password: secret"));
+    const { GET } = await import("./orders/[orderId]/status/route");
+
+    const response = await GET(new Request(`http://localhost/api/checkout/orders/${order.id}/status`, { headers: { "x-checkout-status-capability": "capability" } }), { params: Promise.resolve({ orderId: order.id }) });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ code: "ORDER_STATUS_UNAVAILABLE", message: "Order status is temporarily unavailable." });
   });
 
   it("rejects malformed order identifiers without querying persistence", async () => {
@@ -144,6 +164,49 @@ describe("checkout API routes", () => {
       gateway,
       input: expect.objectContaining({ orderId: order.id, total: 18000, currency: "ARS", payerEmail: "buyer@example.com" }),
     });
+  });
+
+  it("projects payment results and omits provider details and unexpected properties", async () => {
+    const config = { enabled: true, accessToken: "server-secret", supportedMethodIds: new Set(["visa"]) };
+    findUnique.mockResolvedValue({ id: order.id, status: "PENDING_CONFIRMATION", currency: "ARS", total: 18000, contactEmail: "buyer@example.com", statusCapabilityHash: "stored-hash" });
+    loadPaymentConfig.mockReturnValue(config);
+    createPrismaPaymentRepository.mockReturnValue({});
+    createMercadoPagoOrdersGateway.mockReturnValue({});
+    submitPayment.mockResolvedValue({
+      kind: "failed_terminal",
+      attemptId: "attempt-3",
+      nextAction: "none",
+      error: { code: "PAYMENT_DECLINED", nextAction: "none", message: "provider message", providerCode: "provider-code", providerStatus: 400, providerMessage: "provider secret" },
+      providerToken: "provider-token",
+      cause: { secret: "secret" },
+    });
+    const { POST } = await import("./orders/[orderId]/payment/route");
+
+    const response = await POST(new Request(`http://localhost/api/checkout/orders/${order.id}/payment`, {
+      method: "POST",
+      body: JSON.stringify({ intentId: "22222222-2222-4222-8222-222222222222", intentToken: "intent", card: { cardToken: "card-token", paymentMethodId: "visa", paymentType: "credit_card", installments: 1 } }),
+    }), { params: Promise.resolve({ orderId: order.id }) });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      kind: "failed_terminal",
+      attemptId: "attempt-3",
+      nextAction: "none",
+      error: { code: "PAYMENT_DECLINED", nextAction: "none", message: "Payment could not be completed." },
+    });
+  });
+
+  it("returns a stable safe error when payment infrastructure fails", async () => {
+    findUnique.mockRejectedValue(new Error("provider token: secret"));
+    const { POST } = await import("./orders/[orderId]/payment/route");
+
+    const response = await POST(new Request(`http://localhost/api/checkout/orders/${order.id}/payment`, {
+      method: "POST",
+      body: JSON.stringify({ intentId: "22222222-2222-4222-8222-222222222222", intentToken: "intent", card: { cardToken: "card-token", paymentMethodId: "visa", paymentType: "credit_card", installments: 1 } }),
+    }), { params: Promise.resolve({ orderId: order.id }) });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ code: "PAYMENT_UNAVAILABLE", message: "Payment could not be completed." });
   });
 
   it("rejects raw card data before loading or submitting an order", async () => {

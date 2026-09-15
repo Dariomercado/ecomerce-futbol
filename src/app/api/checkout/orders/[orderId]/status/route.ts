@@ -14,33 +14,41 @@ export async function GET(request: Request, { params }: StatusRouteContext) {
   const { orderId } = await params;
   if (!isUuid(orderId)) return notFound();
 
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: {
-      id: true,
-      status: true,
-      currency: true,
-      total: true,
-      updatedAt: true,
-      statusCapabilityHash: true,
-    },
-  });
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        currency: true,
+        total: true,
+        updatedAt: true,
+        statusCapabilityHash: true,
+      },
+    });
 
-  if (!order || !matchesStatusCapability(capability, order.statusCapabilityHash)) return notFound();
+    if (!order || !matchesStatusCapability(capability, order.statusCapabilityHash)) return notFound();
 
-  return NextResponse.json({
-    order: {
-      id: order.id,
-      status: order.status,
-      currency: order.currency,
-      total: order.total,
-      updatedAt: order.updatedAt.toISOString(),
-    },
-  });
+    return NextResponse.json({
+      order: {
+        id: order.id,
+        status: order.status,
+        currency: order.currency,
+        total: order.total,
+        updatedAt: order.updatedAt.toISOString(),
+      },
+    });
+  } catch {
+    return unavailable();
+  }
 }
 
 function notFound() {
   return NextResponse.json({ code: "ORDER_NOT_FOUND", message: "Order not found." }, { status: 404 });
+}
+
+function unavailable() {
+  return NextResponse.json({ code: "ORDER_STATUS_UNAVAILABLE", message: "Order status is temporarily unavailable." }, { status: 500 });
 }
 
 function isUuid(value: string) {

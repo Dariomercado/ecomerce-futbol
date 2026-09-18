@@ -27,8 +27,25 @@ describe("public catalog API", () => {
     expect(findProducts).not.toHaveBeenCalled();
   });
 
-  it("rejects public mutation attempts", async () => {
+  it("keeps archived aggregates out of public list and detail responses", async () => {
+    findProducts.mockResolvedValue({ data: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false } });
+    findProductBySlug.mockResolvedValue(null);
+    const productsRoute = await import("@/app/api/catalog/products/route");
+    const detailRoute = await import("@/app/api/catalog/products/[slug]/route");
+
+    const [listResponse, detailResponse] = await Promise.all([
+      productsRoute.GET(new Request("http://localhost/api/catalog/products")),
+      detailRoute.GET(new Request("http://localhost/api/catalog/products/archived-product"), { params: Promise.resolve({ slug: "archived-product" }) }),
+    ]);
+
+    await expect(listResponse.json()).resolves.toMatchObject({ data: [] });
+    expect(detailResponse.status).toBe(404);
+    await expect(detailResponse.json()).resolves.toMatchObject({ code: "PRODUCT_NOT_FOUND" });
+  });
+
+  it("does not export public product mutation handlers", async () => {
     const route = await import("@/app/api/catalog/products/route");
+    expect("POST" in route).toBe(false);
     const response = await (route as unknown as { POST?: (request: Request) => Promise<Response> }).POST?.(new Request("http://localhost/api/catalog/products", { method: "POST" }));
     expect(response?.status ?? 405).toBe(405);
   });
@@ -51,8 +68,3 @@ describe("public catalog API", () => {
     await expect(response.json()).resolves.toEqual({ code: "CATALOG_UNAVAILABLE", message: "Catalog is temporarily unavailable." });
   });
 });
-
-
-
-
-

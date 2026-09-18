@@ -53,13 +53,29 @@ function isUnsafeMethod(method: string): boolean {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
 
-function loadAppOrigin(env: Environment): string | null {
-  const value = env.APP_ORIGIN?.trim();
+export function loadAppOrigin(env: Environment = process.env): string | null {
+  const appOrigin = env.APP_ORIGIN?.trim();
+  if (appOrigin) return parseExactHttpOrigin(appOrigin);
+
+  return parseExactHttpOrigin(env.DEPLOY_PRIME_URL?.trim());
+}
+
+function parseExactHttpOrigin(value: string | undefined): string | null {
   if (!value) return null;
 
   try {
     const parsed = new URL(value);
-    return parsed.origin === value ? value : null;
+    if (
+      !["http:", "https:"].includes(parsed.protocol)
+      || parsed.username
+      || parsed.password
+      || parsed.hostname.includes("*")
+      || parsed.origin !== value
+    ) {
+      return null;
+    }
+
+    return value;
   } catch {
     return null;
   }

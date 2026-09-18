@@ -1,13 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-export type TemporaryAdminAuthResult =
-  | { authorized: true }
-  | {
-      authorized: false;
-      status: 401 | 403 | 503;
-      code: "ADMIN_AUTH_REQUIRED" | "ADMIN_AUTH_INVALID" | "POST_PAYMENT_UNAVAILABLE";
-    };
-
 export type ReconciliationAuthResult =
   | { authorized: true }
   | {
@@ -19,23 +11,8 @@ export type ReconciliationAuthResult =
 type Environment = Record<string, string | undefined>;
 
 /**
- * Node crypto makes this module server-only; import it solely from Node route
- * handlers and never expose POST_PAYMENT_ADMIN_TOKEN through client config.
- */
-export function authorizeTemporaryAdminRequest(
-  request: Pick<Request, "headers">,
-  env: Environment = process.env,
-): TemporaryAdminAuthResult {
-  return authorizeBearerRequest(request, env.POST_PAYMENT_ADMIN_TOKEN, {
-    required: "ADMIN_AUTH_REQUIRED",
-    invalid: "ADMIN_AUTH_INVALID",
-    unavailable: "POST_PAYMENT_UNAVAILABLE",
-  });
-}
-
-/**
- * Authorizes the server-to-server reconciliation scheduler. This deliberately
- * uses a dedicated secret so scheduler access cannot invoke admin operations.
+ * Authorizes the server-to-server reconciliation scheduler. Human order
+ * actions use the Supabase session and membership boundary instead.
  */
 export function authorizeReconciliationRequest(
   request: Pick<Request, "headers">,

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { loadAppOrigin } from "@/lib/auth/request-integrity";
 import { createSupabaseServerClient, loadSupabaseServerConfig } from "@/lib/auth/supabase-server";
 
 async function requestOperatorSignIn(formData: FormData) {
@@ -7,18 +8,13 @@ async function requestOperatorSignIn(formData: FormData) {
 
   const email = formData.get("email");
   const config = loadSupabaseServerConfig();
-  const appOrigin = process.env.APP_ORIGIN;
+  const appOrigin = loadAppOrigin();
 
   if (typeof email !== "string" || !email.trim() || !config || !appOrigin) {
     redirect("/auth/sign-in?error=unavailable");
   }
 
-  let emailRedirectTo: string;
-  try {
-    emailRedirectTo = new URL("/auth/confirm", appOrigin).toString();
-  } catch {
-    redirect("/auth/sign-in?error=unavailable");
-  }
+  const emailRedirectTo = `${appOrigin}/auth/confirm`;
 
   const supabase = await createSupabaseServerClient(config);
   const { error } = await supabase.auth.signInWithOtp({

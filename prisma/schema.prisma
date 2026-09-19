@@ -17,6 +17,34 @@ enum CurrencyCode {
   ARS
 }
 
+model AdminMembership {
+  id             String            @id @default(uuid()) @db.Uuid
+  supabaseUserId String            @unique @db.Uuid
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  revokedAt      DateTime?
+  auditEvents    AdminAuditEvent[]
+
+  @@index([isActive])
+}
+
+model AdminAuditEvent {
+  id                  String          @id @default(uuid()) @db.Uuid
+  membershipId        String          @db.Uuid
+  actorSupabaseUserId String          @db.Uuid
+  action              String
+  entityType          String
+  entityId            String
+  outcome             String
+  context             Json
+  createdAt           DateTime        @default(now())
+  membership          AdminMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+
+  @@index([actorSupabaseUserId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
 model Category {
   id          String   @id @default(uuid()) @db.Uuid
   name        String

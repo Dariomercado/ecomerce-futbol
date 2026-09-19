@@ -41,4 +41,3 @@ Admin catalog MUST NOT require authentication for public browsing or guest check
 - GIVEN a shopper has no Supabase session
 - WHEN public catalog and guest checkout are used
 - THEN both MUST continue to work
-

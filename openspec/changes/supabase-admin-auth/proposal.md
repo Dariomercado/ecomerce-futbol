@@ -60,5 +60,3 @@ Disable catalog mutations, restore the human token only for cancel/refund, and r
 - [ ] Cancel/refund rejects the human token; scheduler authentication is unchanged.
 - [ ] Catalog create/edit/archive is validated and auditable within the first slice.
 - [ ] Cross-origin unsafe requests fail; guest checkout and public catalog remain unchanged.
-
-

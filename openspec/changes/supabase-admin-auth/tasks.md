@@ -43,5 +43,3 @@ Chain strategy: feature-branch-chain
 - [x] 3.1 RED: add auth callback/sign-out, cookie refresh, `/admin` unauthenticated/forbidden/unavailable shell, and anonymous public catalog/order-status/guest-checkout regression tests.
 - [x] 3.2 GREEN: create `src/proxy.ts`, `src/app/auth/{sign-in/page.tsx,confirm/route.ts,sign-out/route.ts}`, and `src/app/admin/{layout,page}.tsx`; update `.env.example`.
 - [x] 3.3 Document external invite/bootstrap SQL, rollout/cutover/rollback, and scheduler separation in `docs/operations/admin-auth.md`; run `pnpm lint`, `pnpm exec tsc --noEmit`, and `pnpm build`.
-
-

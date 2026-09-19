@@ -36,7 +36,3 @@ Cookie-authenticated unsafe requests MUST pass same-origin and CSRF checks befor
 - GIVEN an authenticated operator submits an unsafe cross-origin request
 - WHEN evaluated
 - THEN it MUST be rejected without state change
-
-
-
-

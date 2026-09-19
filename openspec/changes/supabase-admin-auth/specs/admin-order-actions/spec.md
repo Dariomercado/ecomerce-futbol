@@ -36,4 +36,3 @@ Every cancel/refund reaching domain evaluation MUST append an audit with actor, 
 - GIVEN reconciliation presents the scheduler credential
 - WHEN reconciliation runs
 - THEN it MUST authenticate without an operator session
-

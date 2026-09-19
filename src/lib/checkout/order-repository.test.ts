@@ -55,10 +55,9 @@ function attemptsDb(rows: Array<Record<string, unknown>>) {
 
 const postgresUrl = process.env.DATABASE_URL ?? "postgresql://ecomerce_futbol:ecomerce_futbol_password@localhost:5432/ecomerce_futbol?schema=public";
 const postgres = new PrismaClient({ datasources: { db: { url: postgresUrl } } });
+const POSTGRES_INTEGRATION_TIMEOUT_MS = 60_000;
 
 describe("durable checkout repository on PostgreSQL", () => {
-  afterAll(async () => { await postgres.$disconnect(); });
-
   it("allows exactly one concurrent PostgreSQL receipt claim and exactly one stale-lease recovery", async () => {
     const notificationId = randomUUID();
     const input = { ...receipt, notificationId };
@@ -70,7 +69,7 @@ describe("durable checkout repository on PostgreSQL", () => {
     const recovered = await Promise.all(Array.from({ length: 8 }, () => claimWebhookReceipt(postgres, input, new Date("2026-08-05T10:00:02Z"), 1_000)));
     expect(recovered.filter((result) => result.claimed)).toHaveLength(1);
     expect((await postgres.webhookReceipt.findUniqueOrThrow({ where: { provider_applicationId_topic_notificationId: { provider: input.provider, applicationId: input.applicationId, topic: input.topic, notificationId } } })).attemptCount).toBe(2);
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
 describe("receipt-bound reconciliation on PostgreSQL", () => {
   it("does not mutate an attempt or order until the durable receipt is claimed", async () => {
@@ -91,7 +90,7 @@ describe("receipt-bound reconciliation on PostgreSQL", () => {
     await expect(postgres.paymentAttempt.findUniqueOrThrow({ where: { id: attemptId } })).resolves.toMatchObject({ status: "PAID", providerOrderId });
     await expect(postgres.order.findUniqueOrThrow({ where: { id: orderId } })).resolves.toMatchObject({ status: "PAID" });
     await expect(postgres.webhookReceipt.findUniqueOrThrow({ where: { id: receiptId } })).resolves.toMatchObject({ state: "PROCESSED" });
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
 
 
@@ -103,7 +102,7 @@ describe("durable reconciliation policy on PostgreSQL", () => {
     await postgres.paymentAttempt.create({ data: { id: attemptId, orderId, intentId: randomUUID(), idempotencyKey: randomUUID(), payloadHash: "hash", status: "PENDING", reconcileCount: RECONCILIATION_POLICY.maxAttempts } });
     await createPrismaPaymentRepository(postgres).markReconcilePending(attemptId, "PROVIDER_LOOKUP_RETRYABLE");
     await expect(postgres.paymentAttempt.findUniqueOrThrow({ where: { id: attemptId } })).resolves.toMatchObject({ nextReconcileAt: null, reconcileLastError: "RECONCILIATION_EXHAUSTED:PROVIDER_LOOKUP_RETRYABLE" });
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
 
 describe("reservation transitions and reconciliation schedule on PostgreSQL", () => {
@@ -116,7 +115,7 @@ describe("reservation transitions and reconciliation schedule on PostgreSQL", ()
     await expect(postgres.paymentAttempt.findUniqueOrThrow({ where: { id: fixture.attemptId } })).resolves.toMatchObject({ status: "PAID", providerOrderId: evidence.id, providerPaymentId: evidence.payment.id });
     await expect(postgres.order.findUniqueOrThrow({ where: { id: fixture.orderId } })).resolves.toMatchObject({ status: "PAID" });
     await expect(postgres.stockReservation.findUniqueOrThrow({ where: { id: fixture.reservationId } })).resolves.toMatchObject({ status: "CONSUMED" });
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 
   it("consumes or releases ACTIVE reservations with the receipt-bound reconciliation", async () => {
     const paid = await activeReservationFixture();
@@ -128,7 +127,7 @@ describe("reservation transitions and reconciliation schedule on PostgreSQL", ()
     await completeReceiptAndApplyEvidence(postgres, failed.input("rejected", "rejected"));
     await expect(postgres.stockReservation.findUniqueOrThrow({ where: { id: failed.reservationId } })).resolves.toMatchObject({ status: "RELEASED" });
     await expect(postgres.productVariant.findUniqueOrThrow({ where: { id: failed.variantId } })).resolves.toMatchObject({ stock: 10 });
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 
   it("rolls back order, attempt, and reservation when a mid-transition write fails", async () => {
     const fixture = await activeReservationFixture();
@@ -137,7 +136,7 @@ describe("reservation transitions and reconciliation schedule on PostgreSQL", ()
     await expect(postgres.paymentAttempt.findUniqueOrThrow({ where: { id: fixture.attemptId } })).resolves.toMatchObject({ status: "PENDING", providerOrderId: null });
     await expect(postgres.order.findUniqueOrThrow({ where: { id: fixture.orderId } })).resolves.toMatchObject({ status: "PENDING_CONFIRMATION" });
     await expect(postgres.stockReservation.findUniqueOrThrow({ where: { id: fixture.reservationId } })).resolves.toMatchObject({ status: "ACTIVE" });
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 
   it("executes initial, exponential, and capped retry schedules", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-08-05T10:00:00Z"));
@@ -155,7 +154,7 @@ describe("reservation transitions and reconciliation schedule on PostgreSQL", ()
       const delays = fixtures.map(({ attempt }) => { expect(attempt.nextReconcileAt).not.toBeNull(); return attempt.nextReconcileAt!.getTime() - Date.now(); });
       expect(delays).toEqual([60_000, 120_000, 3_600_000]);
     } finally { vi.useRealTimers(); }
-  });
+  }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
 
 describe("post-payment terminal reservation transitions", () => {
@@ -296,4 +295,4 @@ function postPaymentMemoryFixture({ orderStatus, reservationStatus, operation, w
     read: () => structuredClone(state),
   };
 }
-afterAll(async () => { await postgres.$disconnect(); });
+afterAll(async () => { await postgres.$disconnect(); }, POSTGRES_INTEGRATION_TIMEOUT_MS);

@@ -43,12 +43,21 @@ export async function proxy(request: NextRequest) {
     // The request-specific authorization boundary reports outages fail-closed.
   }
 
+  const csrfToken = request.nextUrl.pathname.startsWith("/admin")
+    ? request.cookies.get(csrfCookieName)?.value ?? crypto.randomUUID()
+    : null;
+  // Make a newly minted HttpOnly value available to the server-rendered shell
+  // in this same request; the browser still receives it only as HttpOnly.
+  if (csrfToken && !request.cookies.get(csrfCookieName)) {
+    request.cookies.set(csrfCookieName, csrfToken);
+  }
+
   const response = NextResponse.next({ request });
   response.headers.set("cache-control", "private, no-store");
   refreshedCookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
 
-  if (request.nextUrl.pathname.startsWith("/admin") && !request.cookies.get(csrfCookieName)) {
-    response.cookies.set(csrfCookieName, crypto.randomUUID(), {
+  if (csrfToken) {
+    response.cookies.set(csrfCookieName, csrfToken, {
       httpOnly: true,
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production",

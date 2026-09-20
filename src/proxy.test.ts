@@ -29,4 +29,16 @@ describe("Supabase cookie refresh proxy", () => {
     expect(getUser).toHaveBeenCalledTimes(1);
     expect(response.headers.get("cache-control")).toContain("private");
   });
+
+  it("mints one HttpOnly CSRF token for both the forwarded admin request and browser response", async () => {
+    const { proxy } = await import("@/proxy");
+    const request = new NextRequest("http://localhost/admin");
+
+    const response = await proxy(request);
+    const token = response.cookies.get("admin_csrf_token");
+
+    expect(token?.value).toBeTruthy();
+    expect(token?.httpOnly).toBe(true);
+    expect(request.cookies.get("admin_csrf_token")?.value).toBe(token?.value);
+  });
 });

@@ -1,3 +1,4 @@
+import { createServerClient } from "@supabase/ssr";
 import { describe, expect, it, vi } from "vitest";
 
 import { requireAdmin } from "./admin-authorization";
@@ -23,11 +24,40 @@ function membershipRepository(findActiveBySupabaseUserId: AdminMembershipReposit
   return { findActiveBySupabaseUserId };
 }
 
+async function realAuthSessionMissingError() {
+  const { error } = await createServerClient(
+    configuredEnvironment.NEXT_PUBLIC_SUPABASE_URL,
+    configuredEnvironment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    {
+      cookies: {
+        getAll: () => [],
+        setAll: () => undefined,
+      },
+    },
+  ).auth.getUser();
+
+  if (!error) throw new Error("Expected Supabase to return AuthSessionMissingError without a session");
+
+  return error;
+}
+
 describe("requireAdmin", () => {
   it("returns 401 when no verified Supabase session is present", async () => {
     await expect(requireAdmin({
       env: configuredEnvironment,
       createClient: () => authClient(null),
+      membershipRepository: membershipRepository(vi.fn()),
+    })).resolves.toEqual({
+      authorized: false,
+      status: 401,
+      code: "ADMIN_SESSION_REQUIRED",
+    });
+  });
+
+  it("returns 401 for the SDK AuthSessionMissingError returned without a session", async () => {
+    await expect(requireAdmin({
+      env: configuredEnvironment,
+      createClient: async () => authClient(null, await realAuthSessionMissingError()),
       membershipRepository: membershipRepository(vi.fn()),
     })).resolves.toEqual({
       authorized: false,

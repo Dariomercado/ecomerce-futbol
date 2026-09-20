@@ -52,9 +52,12 @@ export async function requireAdmin(dependencies: RequireAdminDependencies = {}):
     const client = await (dependencies.createClient ?? createSupabaseServerClient)(config);
     const { data, error } = await client.auth.getUser();
 
+    if (isAuthSessionMissingError(error)) {
+      return sessionRequired();
+    }
     if (error) return unavailable();
     if (!data.user) {
-      return { authorized: false, status: 401, code: "ADMIN_SESSION_REQUIRED" };
+      return sessionRequired();
     }
     if (!isUuid(data.user.id)) {
       return unavailable();
@@ -74,6 +77,18 @@ export async function requireAdmin(dependencies: RequireAdminDependencies = {}):
 
 function unavailable(): AdminAuthorizationResult {
   return { authorized: false, status: 503, code: "ADMIN_AUTH_UNAVAILABLE" };
+}
+
+function sessionRequired(): AdminAuthorizationResult {
+  return { authorized: false, status: 401, code: "ADMIN_SESSION_REQUIRED" };
+}
+
+function isAuthSessionMissingError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "__isAuthError" in error
+    && "name" in error
+    && error.name === "AuthSessionMissingError";
 }
 
 function isUuid(value: string): boolean {

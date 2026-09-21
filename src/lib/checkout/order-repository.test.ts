@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  clearTrackedIdsAfterSuccessfulCleanup,
+  resolveIsolatedTestDatabaseUrl,
+} from "./database-target-safety";
 import { claimWebhookReceipt, completeReceiptAndApplyEvidence, createPrismaPaymentRepository, createPrismaPostPaymentRepository, leaseDuePaymentAttempts, RECONCILIATION_POLICY, reconciliationBackoff } from "./order-repository";
 
 const receipt = { provider: "mercado_pago", applicationId: "app-1", topic: "order", notificationId: "notification-1", resourceId: "order-1", rawBodySha256: "a".repeat(64) };
@@ -53,13 +57,21 @@ function attemptsDb(rows: Array<Record<string, unknown>>) {
   return db;
 }
 
-const postgresUrl = process.env.DATABASE_URL ?? "postgresql://ecomerce_futbol:ecomerce_futbol_password@localhost:5432/ecomerce_futbol?schema=public";
-const postgres = new PrismaClient({ datasources: { db: { url: postgresUrl } } });
+const postgresUrl = resolveIsolatedTestDatabaseUrl(process.env);
+const postgres = postgresUrl
+  ? new PrismaClient({ datasources: { db: { url: postgresUrl } } })
+  : new Proxy({} as PrismaClient, {
+      get() {
+        throw new Error("PostgreSQL integration tests require a safe TEST_DATABASE_URL.");
+      },
+    });
+const describePostgres = postgresUrl ? describe : describe.skip;
 const POSTGRES_INTEGRATION_TIMEOUT_MS = 60_000;
 
-describe("durable checkout repository on PostgreSQL", () => {
+describePostgres("durable checkout repository on PostgreSQL", () => {
   it("allows exactly one concurrent PostgreSQL receipt claim and exactly one stale-lease recovery", async () => {
     const notificationId = randomUUID();
+    tracked.webhookNotificationIds.add(notificationId);
     const input = { ...receipt, notificationId };
     const firstNow = new Date("2026-08-05T10:00:00Z");
     const firstClaims = await Promise.all(Array.from({ length: 8 }, () => claimWebhookReceipt(postgres, input, firstNow, 1_000)));
@@ -71,11 +83,14 @@ describe("durable checkout repository on PostgreSQL", () => {
     expect((await postgres.webhookReceipt.findUniqueOrThrow({ where: { provider_applicationId_topic_notificationId: { provider: input.provider, applicationId: input.applicationId, topic: input.topic, notificationId } } })).attemptCount).toBe(2);
   }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
-describe("receipt-bound reconciliation on PostgreSQL", () => {
+describePostgres("receipt-bound reconciliation on PostgreSQL", () => {
   it("does not mutate an attempt or order until the durable receipt is claimed", async () => {
     const orderId = randomUUID();
     const attemptId = randomUUID();
     const receiptId = randomUUID();
+    tracked.orderIds.add(orderId);
+    tracked.attemptIds.add(attemptId);
+    tracked.receiptIds.add(receiptId);
     await postgres.order.create({ data: { id: orderId, contactEmail: "buyer@example.com", contactFullName: "Buyer", contactPhone: "123", shippingAddress: {}, total: 100, statusCapabilityHash: "capability" } });
     await postgres.paymentAttempt.create({ data: { id: attemptId, orderId, intentId: randomUUID(), idempotencyKey: randomUUID(), payloadHash: "hash", status: "PENDING" } });
     await postgres.webhookReceipt.create({ data: { id: receiptId, provider: "mercado_pago", applicationId: "app-atomic", topic: "order", notificationId: randomUUID(), resourceId: "mp-order", rawBodySha256: "b".repeat(64), state: "RECEIVED" } });
@@ -94,10 +109,12 @@ describe("receipt-bound reconciliation on PostgreSQL", () => {
 });
 
 
-describe("durable reconciliation policy on PostgreSQL", () => {
+describePostgres("durable reconciliation policy on PostgreSQL", () => {
   it("persists bounded backoff exhaustion as a durable alert", async () => {
     const orderId = randomUUID();
     const attemptId = randomUUID();
+    tracked.orderIds.add(orderId);
+    tracked.attemptIds.add(attemptId);
     await postgres.order.create({ data: { id: orderId, contactEmail: "retry@example.com", contactFullName: "Retry", contactPhone: "456", shippingAddress: {}, total: 100, statusCapabilityHash: "capability" } });
     await postgres.paymentAttempt.create({ data: { id: attemptId, orderId, intentId: randomUUID(), idempotencyKey: randomUUID(), payloadHash: "hash", status: "PENDING", reconcileCount: RECONCILIATION_POLICY.maxAttempts } });
     await createPrismaPaymentRepository(postgres).markReconcilePending(attemptId, "PROVIDER_LOOKUP_RETRYABLE");
@@ -105,7 +122,7 @@ describe("durable reconciliation policy on PostgreSQL", () => {
   }, POSTGRES_INTEGRATION_TIMEOUT_MS);
 });
 
-describe("reservation transitions and reconciliation schedule on PostgreSQL", () => {
+describePostgres("reservation transitions and reconciliation schedule on PostgreSQL", () => {
   it("persists immediate provider evidence and the paid stock transition atomically", async () => {
     const fixture = await activeReservationFixture();
     const evidence = fixture.input("processed", "processed").evidence;
@@ -145,6 +162,7 @@ describe("reservation transitions and reconciliation schedule on PostgreSQL", ()
       const fixtures = [];
       for (const reconcileCount of [0, 1, 6]) {
         const orderId = randomUUID(); const attemptId = randomUUID();
+        tracked.orderIds.add(orderId); tracked.attemptIds.add(attemptId);
         await postgres.order.create({ data: { id: orderId, contactEmail: `${attemptId}@example.com`, contactFullName: "Retry", contactPhone: "456", shippingAddress: {}, total: 100, statusCapabilityHash: "capability" } });
         await postgres.paymentAttempt.create({ data: { id: attemptId, orderId, intentId: randomUUID(), idempotencyKey: randomUUID(), payloadHash: "hash", status: "PENDING", reconcileCount } });
         await repository.markReconcilePending(attemptId, "PROVIDER_LOOKUP_RETRYABLE");
@@ -238,11 +256,14 @@ describe("post-payment terminal reservation transitions", () => {
 });
 
 async function activeReservationFixture() {
-  const id = randomUUID(); const category = await postgres.category.create({ data: { name: `Category ${id}`, slug: `category-${id}`, description: "Test category" } });
-  const brand = await postgres.brand.create({ data: { name: `Brand ${id}`, slug: `brand-${id}`, description: "Test brand" } });
-  const product = await postgres.product.create({ data: { name: `Product ${id}`, slug: `product-${id}`, description: "Test product", categoryId: category.id, brandId: brand.id, price: 100, status: "PUBLISHED" } });
-  const variant = await postgres.productVariant.create({ data: { productId: product.id, name: "Test variant", stock: 9, isActive: true } });
+  const id = randomUUID(); const categoryId = randomUUID(); const brandId = randomUUID(); const productId = randomUUID(); const variantId = randomUUID();
   const orderId = randomUUID(); const attemptId = randomUUID(); const receiptId = randomUUID(); const reservationId = randomUUID();
+  tracked.categoryIds.add(categoryId); tracked.brandIds.add(brandId); tracked.productIds.add(productId); tracked.variantIds.add(variantId);
+  tracked.orderIds.add(orderId); tracked.attemptIds.add(attemptId); tracked.receiptIds.add(receiptId); tracked.reservationIds.add(reservationId);
+  const category = await postgres.category.create({ data: { id: categoryId, name: `Category ${id}`, slug: `category-${id}`, description: "Test category" } });
+  const brand = await postgres.brand.create({ data: { id: brandId, name: `Brand ${id}`, slug: `brand-${id}`, description: "Test brand" } });
+  const product = await postgres.product.create({ data: { id: productId, name: `Product ${id}`, slug: `product-${id}`, description: "Test product", categoryId: category.id, brandId: brand.id, price: 100, status: "PUBLISHED" } });
+  const variant = await postgres.productVariant.create({ data: { id: variantId, productId: product.id, name: "Test variant", stock: 9, isActive: true } });
   await postgres.order.create({ data: { id: orderId, contactEmail: `${id}@example.com`, contactFullName: "Buyer", contactPhone: "123", shippingAddress: {}, total: 100, statusCapabilityHash: "capability" } });
   await postgres.paymentAttempt.create({ data: { id: attemptId, orderId, intentId: randomUUID(), idempotencyKey: randomUUID(), payloadHash: "hash", status: "PENDING" } });
   await postgres.stockReservation.create({ data: { id: reservationId, orderId, variantId: variant.id, quantity: 1, status: "ACTIVE" } });
@@ -250,7 +271,7 @@ async function activeReservationFixture() {
   return { orderId, attemptId, receiptId, reservationId, variantId: variant.id, input: (status: string, paymentStatus: string) => ({ receiptId, attemptId, orderId, outcome: "PENDING" as const, evidence: { id: `mp-${id}`, externalReference: orderId, status, statusDetail: status === "processed" ? "accredited" : status, updatedAt: "2026-08-05T10:00:00.000Z", payment: { id: `pay-${id}`, status: paymentStatus, statusDetail: paymentStatus === "processed" ? "accredited" : paymentStatus } } }) };
 }
 
-function postPaymentMemoryFixture({ orderStatus, reservationStatus, operation, withReceipt = false, failReservationUpdate = false }: { orderStatus: "PAID" | "PAYMENT_PENDING"; reservationStatus: "ACTIVE" | "CONSUMED"; operation: "cancel" | "refund"; withReceipt?: boolean; failReservationUpdate?: boolean }) {
+function postPaymentMemoryFixture({ orderStatus, reservationStatus, withReceipt = false, failReservationUpdate = false }: { orderStatus: "PAID" | "PAYMENT_PENDING"; reservationStatus: "ACTIVE" | "CONSUMED"; operation: "cancel" | "refund"; withReceipt?: boolean; failReservationUpdate?: boolean }) {
   const orderId = randomUUID(); const providerOrderId = `mp-${randomUUID()}`; const reservationId = randomUUID();
   let state = { order: { id: orderId, status: orderStatus }, reservation: { id: reservationId, orderId, variantId: "variant-1", quantity: 1, status: reservationStatus }, stock: 9, operation: { status: "RUNNING" }, attempt: { id: "attempt-1", orderId, status: "PENDING" }, receipt: { id: "receipt-1", state: "PROCESSING" } };
   const db = {
@@ -295,4 +316,41 @@ function postPaymentMemoryFixture({ orderStatus, reservationStatus, operation, w
     read: () => structuredClone(state),
   };
 }
-afterAll(async () => { await postgres.$disconnect(); }, POSTGRES_INTEGRATION_TIMEOUT_MS);
+const tracked = {
+  categoryIds: new Set<string>(),
+  brandIds: new Set<string>(),
+  productIds: new Set<string>(),
+  variantIds: new Set<string>(),
+  orderIds: new Set<string>(),
+  attemptIds: new Set<string>(),
+  receiptIds: new Set<string>(),
+  reservationIds: new Set<string>(),
+  webhookNotificationIds: new Set<string>(),
+};
+
+afterEach(async () => {
+  if (!postgresUrl) return;
+
+  await clearTrackedIdsAfterSuccessfulCleanup(tracked, () =>
+    postgres.$transaction(async (tx) => {
+      const orderIds = [...tracked.orderIds];
+      const productIds = [...tracked.productIds];
+      const variantIds = [...tracked.variantIds];
+      await tx.postPaymentOperation.deleteMany({ where: { orderId: { in: orderIds } } });
+      await tx.stockReservation.deleteMany({ where: { OR: [{ id: { in: [...tracked.reservationIds] } }, { orderId: { in: orderIds } }, { variantId: { in: variantIds } }] } });
+      await tx.orderLine.deleteMany({ where: { OR: [{ orderId: { in: orderIds } }, { productId: { in: productIds } }] } });
+      await tx.paymentAttempt.deleteMany({ where: { OR: [{ id: { in: [...tracked.attemptIds] } }, { orderId: { in: orderIds } }] } });
+      await tx.order.deleteMany({ where: { id: { in: orderIds } } });
+      await tx.webhookReceipt.deleteMany({ where: { OR: [{ id: { in: [...tracked.receiptIds] } }, { notificationId: { in: [...tracked.webhookNotificationIds] } }] } });
+      await tx.productImage.deleteMany({ where: { OR: [{ productId: { in: productIds } }, { variantId: { in: variantIds } }] } });
+      await tx.productVariant.deleteMany({ where: { OR: [{ id: { in: variantIds } }, { productId: { in: productIds } }] } });
+      await tx.product.deleteMany({ where: { id: { in: productIds } } });
+      await tx.category.deleteMany({ where: { id: { in: [...tracked.categoryIds] } } });
+      await tx.brand.deleteMany({ where: { id: { in: [...tracked.brandIds] } } });
+    }),
+  );
+}, POSTGRES_INTEGRATION_TIMEOUT_MS);
+
+afterAll(async () => {
+  if (postgresUrl) await postgres.$disconnect();
+}, POSTGRES_INTEGRATION_TIMEOUT_MS);

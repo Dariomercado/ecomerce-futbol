@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const verifyOtp = vi.fn();
+const exchangeCodeForSession = vi.fn();
 const signOut = vi.fn();
 const createSupabaseServerClient = vi.fn();
 
@@ -14,9 +15,21 @@ describe("operator auth routes", () => {
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "publishable-key");
-    createSupabaseServerClient.mockResolvedValue({ auth: { verifyOtp, signOut } });
+    createSupabaseServerClient.mockResolvedValue({ auth: { verifyOtp, exchangeCodeForSession, signOut } });
     verifyOtp.mockResolvedValue({ data: { session: { user: { id: "user-1" } } }, error: null });
+    exchangeCodeForSession.mockResolvedValue({ data: { session: { user: { id: "user-1" } } }, error: null });
     signOut.mockResolvedValue({ error: null });
+  });
+
+  it("exchanges a PKCE callback code and redirects to the fixed admin path", async () => {
+    const { GET } = await import("@/app/auth/confirm/route");
+
+    const response = await GET(new Request("http://localhost/auth/confirm?code=pkce-code"));
+
+    expect(response.status).toBe(303);
+    expect(new URL(response.headers.get("location") ?? "http://localhost").pathname).toBe("/admin");
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("pkce-code");
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 
   it.each(["invite", "magiclink"])("confirms an allowed %s link and redirects to the fixed admin path", async (type) => {

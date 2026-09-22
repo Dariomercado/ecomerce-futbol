@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { adminRedirectPath, isSupportedOperatorEmailTokenType, loadSupabaseServerConfig } from "./supabase-server";
 
 describe("Supabase operator session helpers", () => {
-  it("accepts only invite and magic-link confirmation types", () => {
+  it("accepts passwordless email confirmation types and rejects unrelated types", () => {
+    expect(isSupportedOperatorEmailTokenType("email")).toBe(true);
     expect(isSupportedOperatorEmailTokenType("invite")).toBe(true);
     expect(isSupportedOperatorEmailTokenType("magiclink")).toBe(true);
     expect(isSupportedOperatorEmailTokenType("recovery")).toBe(false);

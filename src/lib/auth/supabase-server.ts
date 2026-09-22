@@ -8,7 +8,7 @@ export type SupabaseServerConfig = {
   publishableKey: string;
 };
 
-export type SupportedEmailTokenType = "invite" | "magiclink";
+export type SupportedEmailTokenType = "email" | "invite" | "magiclink";
 
 export const adminRedirectPath = "/admin";
 
@@ -40,7 +40,7 @@ export function loadSupabaseServerConfig(env: Environment = process.env): Supaba
  * into an admin redirect.
  */
 export function isSupportedOperatorEmailTokenType(value: string | null): value is SupportedEmailTokenType {
-  return value === "invite" || value === "magiclink";
+  return value === "email" || value === "invite" || value === "magiclink";
 }
 
 /**

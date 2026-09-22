@@ -32,7 +32,7 @@ describe("operator auth routes", () => {
     expect(verifyOtp).not.toHaveBeenCalled();
   });
 
-  it.each(["invite", "magiclink"])("confirms an allowed %s link and redirects to the fixed admin path", async (type) => {
+  it.each(["email", "invite", "magiclink"])("confirms an allowed %s link and redirects to the fixed admin path", async (type) => {
     const { GET } = await import("@/app/auth/confirm/route");
 
     const response = await GET(new Request(`http://localhost/auth/confirm?token_hash=token-123&type=${type}`));

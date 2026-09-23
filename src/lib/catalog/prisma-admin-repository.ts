@@ -9,6 +9,7 @@ import type { AdminProductImageInput, AdminProductInput, AdminProductVariantInpu
 
 type ProductId = { id: string };
 type ArchivedProduct = { id: string; status: "archived"; isActive: false };
+type RestoredProduct = { id: string; status: "draft"; isActive: true; featured: false };
 
 export type AdminCatalogTransaction = {
   listProducts(input: { page: number; limit: number }): Promise<unknown>;
@@ -19,6 +20,7 @@ export type AdminCatalogTransaction = {
   replaceVariants(productId: string, variants: AdminProductVariantInput[]): Promise<void>;
   replaceImages(productId: string, images: AdminProductImageInput[]): Promise<void>;
   archiveProduct(productId: string): Promise<ArchivedProduct>;
+  restoreProduct(productId: string): Promise<RestoredProduct>;
   appendAudit(event: AppendAdminAuditEvent): Promise<void>;
 };
 
@@ -114,13 +116,28 @@ function createTransaction(database: Prisma.TransactionClient): AdminCatalogTran
       return { id: productId, status: "archived", isActive: false };
     },
 
+    async restoreProduct(productId) {
+      const product = await database.product.findUnique({
+        where: { id: productId },
+        select: { id: true, status: true, categoryId: true, brandId: true },
+      });
+      if (!product) throw new Error("CATALOG_PRODUCT_NOT_FOUND");
+      if (product.status !== ProductStatus.ARCHIVED) throw new Error("CATALOG_RESTORE_CONFLICT");
+      await ensureActiveReferences(database, product);
+      await database.product.update({
+        where: { id: productId },
+        data: { status: ProductStatus.DRAFT, isActive: true, featured: false },
+      });
+      return { id: productId, status: "draft", isActive: true, featured: false };
+    },
+
     async appendAudit(event) {
       await database.adminAuditEvent.create({ data: event });
     },
   };
 }
 
-async function ensureActiveReferences(database: Prisma.TransactionClient, input: AdminProductInput) {
+async function ensureActiveReferences(database: Prisma.TransactionClient, input: Pick<AdminProductInput, "categoryId" | "brandId">) {
   const [category, brand] = await Promise.all([
     database.category.findFirst({ where: { id: input.categoryId, isActive: true }, select: { id: true } }),
     database.brand.findFirst({ where: { id: input.brandId, isActive: true }, select: { id: true } }),

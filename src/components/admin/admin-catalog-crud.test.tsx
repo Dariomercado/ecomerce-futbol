@@ -22,7 +22,7 @@ function mockInitialLoad(fetchMock: ReturnType<typeof vi.fn>) { fetchMock.mockRe
 
 describe("AdminCatalogCrud", () => {
   const fetchMock = vi.fn();
-  beforeEach(() => { vi.stubGlobal("fetch", fetchMock); fetchMock.mockReset(); mutateAdminCatalog.mockReset(); });
+  beforeEach(() => { vi.stubGlobal("fetch", fetchMock); vi.stubGlobal("confirm", vi.fn(() => true)); fetchMock.mockReset(); mutateAdminCatalog.mockReset(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("loads catalog and taxonomy before rendering an editable product", async () => {
@@ -51,5 +51,19 @@ describe("AdminCatalogCrud", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archive product" }));
     await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledWith({ operation: "archive", productId: product.id }));
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("DELETE"))).toBe(false);
+  });
+
+  it("restores an archived product as a draft through the server action", async () => {
+    const archivedPage = { data: [{ ...product, status: "ARCHIVED", isActive: false, featured: false }], pagination: page.pagination };
+    fetchMock.mockResolvedValueOnce(response(archivedPage)).mockResolvedValueOnce(response([category])).mockResolvedValueOnce(response([brand]));
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...product, status: "draft", isActive: true, featured: false } });
+    fetchMock.mockResolvedValueOnce(response(page))
+      .mockResolvedValueOnce(response([category]))
+      .mockResolvedValueOnce(response([brand]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore as draft" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenLastCalledWith({ operation: "restore", productId: product.id }));
   });
 });

@@ -12,7 +12,8 @@ Ecomerce Futbol is a football ecommerce portfolio application with a public cata
 | Checkout | Cart, guest checkout, and persisted orders; accounts are optional |
 | Payments | Mercado Pago tokenization, 3DS, payment state machine, idempotency, and provider-safe outcomes |
 | Operations | Signed webhooks, cancellation/refund flows, and post-payment reconciliation |
-| Authentication | Supabase Auth selected, but not yet configured |
+| Authentication | Supabase Auth Magic Link sign-in and callback/auth boundary exist locally; persistent roles/RBAC remain deferred |
+| Admin catalog | CRUD, safe archive/restore, request-integrity/CSRF protection, authorization, audit logging, and focused tests; admin form controls have current visual improvements |
 
 ## Payment operations
 
@@ -30,6 +31,13 @@ Current ordinary-policy verification evidence:
 - ESLint: 0 errors, 2 warnings
 
 The repository runs with RDD disabled at clone scope, using the ordinary-policy compatibility workflow instead: lightweight OpenSpec planning, delegated implementation, and standard test/build/lint evidence. Historical native SDD verification is stale and its archive is blocked by authority infrastructure, so this README does **not** claim a native SDD archive PASS. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current operational checkpoint.
+
+## Current delivery sequence
+
+The next slice is admin visual polish plus safe catalog restore. After that,
+the project will add Supabase Storage for drag-and-drop and multiple product
+images, then complete persistent roles/RBAC before final deployment verification
+and portfolio documentation.
 
 ## Quick start
 

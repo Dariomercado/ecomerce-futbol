@@ -5,12 +5,14 @@ import { cookies, headers } from "next/headers";
 import { POST as createProduct } from "@/app/api/internal/catalog/products/route";
 import { PATCH as updateProduct } from "@/app/api/internal/catalog/products/[productId]/route";
 import { POST as archiveProduct } from "@/app/api/internal/catalog/products/[productId]/archive/route";
+import { POST as restoreProduct } from "@/app/api/internal/catalog/products/[productId]/restore/route";
 import type { AdminProductInput } from "@/lib/catalog/admin-contracts";
 
 type Mutation =
   | { operation: "create"; input: AdminProductInput }
   | { operation: "update"; productId: string; input: AdminProductInput }
-  | { operation: "archive"; productId: string };
+  | { operation: "archive"; productId: string }
+  | { operation: "restore"; productId: string };
 
 type MutationResult =
   | { ok: true; product: unknown }
@@ -50,7 +52,13 @@ export async function mutateAdminCatalog(mutation: Mutation): Promise<MutationRe
     }), { params: Promise.resolve({ productId: mutation.productId }) }));
   }
 
-  return serialize(await archiveProduct(new Request(`${origin}${productPath}/archive`, {
+  if (mutation.operation === "archive") {
+    return serialize(await archiveProduct(new Request(`${origin}${productPath}/archive`, {
+      method: "POST", headers: forwardedHeaders,
+    }), { params: Promise.resolve({ productId: mutation.productId }) }));
+  }
+
+  return serialize(await restoreProduct(new Request(`${origin}${productPath}/restore`, {
     method: "POST", headers: forwardedHeaders,
   }), { params: Promise.resolve({ productId: mutation.productId }) }));
 }

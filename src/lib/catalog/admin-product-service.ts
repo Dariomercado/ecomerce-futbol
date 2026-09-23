@@ -61,6 +61,9 @@ export function createAdminCatalogService({ repository = createPrismaAdminCatalo
     async updateProduct({ actor, productId, input }: UpdateProductCommand) {
       assertValidInput(input);
       return execute(repository, async (tx) => {
+        // Capture paths in the database transaction, before replacement, so Storage
+        // cleanup can only occur after the aggregate (including its audit) commits.
+        const previousStoragePaths = await tx.listImageStoragePaths(productId);
         await tx.updateProduct(productId, input);
         await tx.replaceVariants(productId, input.variants);
         await tx.replaceImages(productId, input.images);
@@ -68,7 +71,10 @@ export function createAdminCatalogService({ repository = createPrismaAdminCatalo
           ...aggregateContext(input),
           changedFields: "name,slug,description,categoryId,brandId,price,compareAtPrice,featured,status,variants,images",
         });
-        return { id: productId, ...input };
+        const retainedStoragePaths = new Set(input.images.flatMap((image) => image.storagePath?.trim() ? [image.storagePath.trim()] : []));
+        const storagePathsToDelete = [...new Set(previousStoragePaths.map((path) => path.trim()).filter(Boolean))]
+          .filter((path) => !retainedStoragePaths.has(path));
+        return { id: productId, ...input, storagePathsToDelete };
       });
     },
 
@@ -156,6 +162,7 @@ export function getAdminCatalogErrorStatus(error: unknown): 400 | 404 | 409 | 50
     case "CATALOG_PRODUCT_NOT_FOUND": return 404;
     case "CATALOG_CONFLICT":
     case "CATALOG_ARCHIVE_CONFLICT": return 409;
+    case "CATALOG_RESTORE_CONFLICT": return 409;
     default: return 503;
   }
 }

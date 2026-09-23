@@ -132,6 +132,9 @@ model ProductImage {
   variantId String?  @db.Uuid
   url       String
   alt       String
+  storagePath String?
+  mimeType  String?
+  sizeBytes Int?
   position  Int
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())

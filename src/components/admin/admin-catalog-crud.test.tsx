@@ -55,11 +55,11 @@ describe("AdminCatalogCrud", () => {
     const name = await screen.findByLabelText("Name");
     const slug = screen.getByLabelText("Slug");
 
-    fireEvent.change(name, { target: { value: "Botín Fútbol Pro" } });
+    fireEvent.change(name, { target: { value: "BotÃ­n FÃºtbol Pro" } });
     expect(slug).toHaveValue("botin-futbol-pro");
 
     fireEvent.change(slug, { target: { value: "custom-product-slug" } });
-    fireEvent.change(name, { target: { value: "Botín Fútbol Elite" } });
+    fireEvent.change(name, { target: { value: "BotÃ­n FÃºtbol Elite" } });
     expect(slug).toHaveValue("custom-product-slug");
   });
 
@@ -71,8 +71,37 @@ describe("AdminCatalogCrud", () => {
     expect(screen.getByLabelText("Name")).toHaveClass("border-2", "border-input");
     expect(screen.getByText("A unique inventory code used to identify this exact variant.")).toBeInTheDocument();
     expect(screen.getByText("Paste the public HTTPS address where the product image is hosted.")).toBeInTheDocument();
-    expect(screen.getByText("Controls the display order; lower numbers appear first.")).toBeInTheDocument();
+    expect(screen.getByText(/Controls the display order; lower numbers appear first\./)).toBeInTheDocument();
     expect(screen.getByText("Describe the image for screen readers and when it cannot load.")).toBeInTheDocument();
+  });
+
+  it("preserves drag-and-drop previews and sends uploaded Storage metadata", async () => {
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:local-preview"), revokeObjectURL: vi.fn() });
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+
+    const file = new File(["image-bytes"], "control-side.webp", { type: "image/webp" });
+    fireEvent.drop(screen.getByRole("button", { name: "Upload product images" }), { dataTransfer: { files: [file] } });
+    expect(screen.getByAltText("Local preview for control-side.webp")).toHaveAttribute("src", "blob:local-preview");
+
+    const uploadedImage = {
+      path: `${product.id}/uploaded.webp`,
+      url: "https://storage.example.test/uploaded.webp",
+      mimeType: "image/webp",
+      sizeBytes: file.size,
+    };
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product }).mockResolvedValueOnce({ ok: true, product });
+    fetchMock.mockResolvedValueOnce(response({ images: [uploadedImage] }));
+    mockInitialLoad(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledTimes(2));
+    expect(mutateAdminCatalog.mock.calls[1][0]).toMatchObject({
+      operation: "update",
+      productId: product.id,
+      input: { images: expect.arrayContaining([expect.objectContaining({ storagePath: uploadedImage.path, mimeType: uploadedImage.mimeType, sizeBytes: uploadedImage.sizeBytes })]) },
+    });
   });
 
   it("sends complete aggregates through the server action without a client CSRF token", async () => {

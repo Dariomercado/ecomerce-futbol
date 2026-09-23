@@ -200,6 +200,7 @@ export function AdminCatalogCrud() {
       }
       setSelectedId(saved.id);
       setForm(finalForm);
+      setSlugManuallyEdited(true);
       setMessage(pendingImages.length ? "Product saved and images uploaded." : isEditing ? "Product updated." : "Product created.");
       setSlugManuallyEdited(true);
       await loadCatalog();
@@ -253,7 +254,7 @@ export function AdminCatalogCrud() {
           <button className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" onClick={startCreate} type="button">New product</button>
         </div>
         <ul aria-label="Catalog products" className="mt-5 space-y-2">
-          {products.map((product) => <li key={product.id}><button aria-pressed={selectedId === product.id} className="w-full rounded-md border p-3 text-left hover:bg-muted aria-pressed:border-primary" onClick={() => startEdit(product)} type="button"><span className="block font-medium">{product.name}</span><span className="mt-1 block text-xs text-muted-foreground">{statusLabel(product.status)} Â· {formatArs(product.price)}</span></button></li>)}
+          {products.map((product) => <li key={product.id}><button aria-pressed={selectedId === product.id} className="w-full rounded-md border p-3 text-left hover:bg-muted aria-pressed:border-primary" onClick={() => startEdit(product)} type="button"><span className="block font-medium">{product.name}</span><span className="mt-1 block text-xs text-muted-foreground">{statusLabel(product.status)} Ã‚Â· {formatArs(product.price)}</span></button></li>)}
           {products.length === 0 ? <li className="rounded-md bg-muted p-3 text-sm text-muted-foreground">No products yet. Create the first catalog product.</li> : null}
         </ul>
       </aside>
@@ -297,9 +298,10 @@ function ImageFields({ availableVariantSkus, fileInputRef, form, onAddFiles, onR
       <Field helperText="Describe the image for screen readers and when it cannot load." label={`Alt text ${index + 1}`}><input required value={image.alt} onChange={(event) => updateImage(setForm, index, "alt", event.target.value)} /></Field>
       <Field label={`Linked variant ${index + 1}`}><select value={image.variantSku ?? ""} onChange={(event) => updateImage(setForm, index, "variantSku", event.target.value || null)}><option value="">No variant link</option>{availableVariantSkus.map((sku) => <option key={sku} value={sku}>{sku}</option>)}</select></Field>
       <label className="flex items-center gap-2 text-sm font-medium"><input checked={image.isPrimary} onChange={() => setPrimaryImage(setForm, index)} type="radio" name="primary-image" /> Primary image</label>
+      <p className="text-xs text-muted-foreground">Position {image.position}. Controls the display order; lower numbers appear first.</p>
       <div className="flex gap-2"><button disabled={index === 0} onClick={() => moveImage(setForm, index, -1)} type="button">Move up</button><button disabled={index === form.images.length - 1} onClick={() => moveImage(setForm, index, 1)} type="button">Move down</button><button className="text-destructive" onClick={() => { onRemovePreview(image.previewUrl); removeImage(setForm, index); }} type="button">Remove image</button></div>
     </div>)}
-    <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, images: [...current.images, { id: `manual-${crypto.randomUUID()}`, url: "", alt: "", position: current.images.length + 1, isPrimary: current.images.length === 0, variantSku: null }] }))} type="button">Add image URL</button>
+    <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, images: [...current.images, { id: createRowKey("image"), url: "", alt: "", position: current.images.length + 1, isPrimary: current.images.length === 0, variantSku: null }] }))} type="button">Add image URL</button>
   </fieldset>;
 }
 const fieldControlClassName = "mt-1 min-h-10 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
@@ -333,7 +335,7 @@ function toProductInput(form: ProductForm): AdminProductInput | null {
   const price = parseWholeNumber(form.price); const compareAtPrice = form.compareAtPrice.trim() ? parseWholeNumber(form.compareAtPrice) : null;
   if (price === null || (form.compareAtPrice.trim() && (compareAtPrice === null || compareAtPrice <= price)) || form.variants.some((variant) => !Number.isInteger(variant.stock) || variant.stock < 0 || (variant.price != null && (!Number.isInteger(variant.price) || variant.price < 1))) || form.images.some((image) => !Number.isInteger(image.position) || image.position < 1)) return null;
   const images = form.images.filter((image) => !image.file).map(({ id: _id, file: _file, previewUrl: _previewUrl, ...image }) => ({ ...image, url: image.url.trim(), alt: image.alt.trim() }));
-  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ ...variant, name: variant.name.trim(), sku: variant.sku.trim() })), images };
+  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ name: variant.name.trim(), sku: variant.sku.trim(), stock: variant.stock, isActive: variant.isActive, size: variant.size, color: variant.color, surface: variant.surface, price: variant.price })), images };
 }
 function formWithUploadPlaceholder(form: ProductForm): ProductForm {
   const persisted = form.images.filter((image) => !image.file && image.url.trim());
@@ -364,7 +366,7 @@ function replacePendingImages(baseForm: ProductForm, uploaded: UploadedImage[]):
   return { ...baseForm, images: normalizeImageOrder(retained) };
 }
 function uploadErrorMessage(payload: unknown) { const code = typeof payload === "object" && payload !== null && "code" in payload ? (payload as { code?: unknown }).code : undefined; if (code === "UNSUPPORTED_IMAGE_TYPE") return "Only JPEG, PNG, and WebP images can be uploaded."; if (code === "IMAGE_SIZE_INVALID") return "Each image must be no larger than 5 MiB."; if (code === "IMAGE_LIMIT_EXCEEDED") return "A product can have at most 8 images."; if (code === "STORAGE_UNAVAILABLE") return "Image storage is temporarily unavailable. Your files were not attached."; return "Image upload failed. The product was saved without the new files."; }
-function slugifyProductName(value: string) { return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+function slugifyProductName(value: string) { return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 function parseWholeNumber(value: string): number | null { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : null; }
 function isProductList(value: unknown): value is AdminProductList { return typeof value === "object" && value !== null && "data" in value && Array.isArray(value.data) && "pagination" in value; }
 function isSavedProduct(value: unknown): value is AdminProduct { return typeof value === "object" && value !== null && "id" in value && typeof value.id === "string"; }

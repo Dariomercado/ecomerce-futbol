@@ -17,6 +17,7 @@ type AdminProduct = Omit<AdminProductInput, "variants" | "images" | "status"> & 
 };
 
 type AdminProductList = { data: AdminProduct[]; pagination: PaginationMeta };
+type FormImage = AdminProductImageInput & { id: string; file?: File; previewUrl?: string };
 type ProductForm = {
   name: string;
   slug: string;
@@ -28,7 +29,7 @@ type ProductForm = {
   featured: boolean;
   status: AdminProductStatus;
   variants: Array<AdminProductVariantInput>;
-  images: Array<AdminProductImageInput>;
+  images: FormImage[];
 };
 
 const EMPTY_FORM: ProductForm = {
@@ -42,8 +43,13 @@ const EMPTY_FORM: ProductForm = {
   featured: false,
   status: "draft",
   variants: [{ name: "", sku: "", stock: 0, isActive: true, size: null, color: null, surface: null, price: null }],
-  images: [{ url: "", alt: "", position: 1, isPrimary: true, variantSku: null }],
+  images: [{ id: "manual-1", url: "", alt: "", position: 1, isPrimary: true, variantSku: null }],
 };
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGES_PER_PRODUCT = 8;
+const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const CREATE_PLACEHOLDER_URL = "/catalog/products/control-fg-verde-1.png";
 
 export function AdminCatalogCrud() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -52,8 +58,10 @@ export function AdminCatalogCrud() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [mutationState, setMutationState] = useState<"idle" | "saving" | "archiving">("idle");
+  const [mutationState, setMutationState] = useState<"idle" | "saving" | "archiving" | "restoring">("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const objectUrls = useRef(new Set<string>());
 
   const selectedProduct = products.find((product) => product.id === selectedId) ?? null;
   const isEditing = selectedProduct !== null;
@@ -62,6 +70,18 @@ export function AdminCatalogCrud() {
     () => form.variants.flatMap((variant) => variant.sku.trim() ? [variant.sku.trim()] : []),
     [form.variants],
   );
+
+  function revokeObjectUrl(url: string | undefined) {
+    if (!url || !objectUrls.current.delete(url)) return;
+    URL.revokeObjectURL(url);
+  }
+
+  function clearLocalPreviews() {
+    objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrls.current.clear();
+  }
+
+  useEffect(() => () => clearLocalPreviews(), []);
 
   async function loadCatalog() {
     setState("loading");
@@ -96,19 +116,50 @@ export function AdminCatalogCrud() {
 
   function startCreate() {
     setSelectedId(null);
+    clearLocalPreviews();
     setForm(EMPTY_FORM);
     setMessage(null);
   }
 
   function startEdit(product: AdminProduct) {
     setSelectedId(product.id);
+    clearLocalPreviews();
     setForm(formFromProduct(product));
     setMessage(null);
   }
 
+  function addFiles(files: FileList | File[]) {
+    const candidates = Array.from(files);
+    const currentImages = form.images.filter((image) => image.file || image.url.trim());
+    const accepted: File[] = [];
+    const errors: string[] = [];
+    for (const file of candidates) {
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) errors.push(`${file.name}: only JPEG, PNG, and WebP images are allowed.`);
+      else if (file.size <= 0 || file.size > MAX_FILE_BYTES) errors.push(`${file.name}: images must be no larger than 5 MiB.`);
+      else if (currentImages.length + accepted.length >= MAX_IMAGES_PER_PRODUCT) errors.push(`A product can have at most ${MAX_IMAGES_PER_PRODUCT} images.`);
+      else accepted.push(file);
+    }
+    if (accepted.length) {
+      setForm((current) => {
+        const retained = current.images.filter((image) => image.file || image.url.trim());
+        return {
+          ...current,
+          images: [...retained, ...accepted.map((file, index) => {
+            const previewUrl = URL.createObjectURL(file);
+            objectUrls.current.add(previewUrl);
+            return { id: `local-${crypto.randomUUID()}`, file, previewUrl, url: previewUrl, alt: file.name.replace(/\.[^.]+$/, ""), position: retained.length + index + 1, isPrimary: retained.length + index === 0, variantSku: null };
+          })],
+        };
+      });
+    }
+    setMessage(errors.length ? errors.join(" ") : null);
+  }
+
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input = toProductInput(form);
+    const pendingImages = form.images.filter((image) => image.file);
+    const initialForm = pendingImages.length ? formWithUploadPlaceholder(form) : form;
+    const input = toProductInput(initialForm);
     if (!input) {
       setMessage("Price, comparison price, and stock must be whole numbers. A comparison price must be higher than the price.");
       return;
@@ -126,9 +177,25 @@ export function AdminCatalogCrud() {
 
       const saved: unknown = result.product;
       if (!isSavedProduct(saved)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+      let finalForm = initialForm;
+      if (pendingImages.length) {
+        const controller = new AbortController();
+        try {
+          const uploaded = await uploadProductImages(saved.id, pendingImages.map((image) => image.file!), controller.signal);
+          finalForm = replacePendingImages(initialForm, uploaded);
+          const finalInput = toProductInput(finalForm);
+          if (!finalInput) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+          const finalResult = await mutateAdminCatalog({ operation: "update", productId: saved.id, input: finalInput });
+          if (!finalResult.ok) throw new Error(finalResult.code);
+          pendingImages.forEach((image) => revokeObjectUrl(image.previewUrl));
+        } catch (error) {
+          controller.abort();
+          throw error;
+        }
+      }
       setSelectedId(saved.id);
-      setForm(formFromProduct(saved));
-      setMessage(isEditing ? "Product updated." : "Product created.");
+      setForm(finalForm);
+      setMessage(pendingImages.length ? "Product saved and images uploaded." : isEditing ? "Product updated." : "Product created.");
       await loadCatalog();
     } catch (error) {
       setMessage(errorMessage(error));
@@ -196,7 +263,7 @@ export function AdminCatalogCrud() {
             <div className="grid gap-4 sm:grid-cols-3"><Field label="Price (ARS)"><input min="1" required step="1" type="number" value={form.price} onChange={(event) => updateForm(setForm, "price", event.target.value)} /></Field><Field label="Compare at price (ARS)"><input min="1" step="1" type="number" value={form.compareAtPrice} onChange={(event) => updateForm(setForm, "compareAtPrice", event.target.value)} /></Field><Field label="Status"><select value={form.status} onChange={(event) => updateForm(setForm, "status", event.target.value as AdminProductStatus)}><option value="draft">Draft</option><option value="published">Published</option></select></Field></div>
             <label className="flex items-center gap-2 text-sm font-medium"><input checked={form.featured} onChange={(event) => updateForm(setForm, "featured", event.target.checked)} type="checkbox" /> Featured product</label>
             <VariantFields form={form} setForm={setForm} />
-            <ImageFields availableVariantSkus={availableVariantSkus} form={form} setForm={setForm} />
+            <ImageFields availableVariantSkus={availableVariantSkus} fileInputRef={fileInputRef} form={form} onAddFiles={addFiles} onRemovePreview={revokeObjectUrl} setForm={setForm} />
           </fieldset>
           <div className="flex flex-wrap gap-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60" disabled={mutationState !== "idle" || isArchived} type="submit">{mutationState === "saving" ? "Saving..." : isEditing ? "Save complete product" : "Create product"}</button>{isEditing && isArchived ? <button className="rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={mutationState !== "idle"} onClick={() => void restoreProduct()} type="button">{mutationState === "restoring" ? "Restoring..." : "Restore as draft"}</button> : null}{isEditing && !isArchived ? <button className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive disabled:opacity-60" disabled={mutationState !== "idle"} onClick={() => void archiveProduct()} type="button">{mutationState === "archiving" ? "Archiving..." : "Archive product"}</button> : null}</div>
         </form>
@@ -244,29 +311,54 @@ function updateForm<K extends Exclude<keyof ProductForm, "variants" | "images">>
 function updateVariant<K extends keyof AdminProductVariantInput>(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number, key: K, value: AdminProductVariantInput[K]) { setForm((current) => ({ ...current, variants: current.variants.map((variant, variantIndex) => variantIndex === index ? { ...variant, [key]: value } : variant) })); }
 function updateImage<K extends keyof AdminProductImageInput>(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number, key: K, value: AdminProductImageInput[K]) { setForm((current) => ({ ...current, images: current.images.map((image, imageIndex) => imageIndex === index ? { ...image, [key]: value } : image) })); }
 function removeVariant(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number) { setForm((current) => ({ ...current, variants: current.variants.filter((_, variantIndex) => variantIndex !== index), images: current.images.map((image) => image.variantSku === current.variants[index]?.sku ? { ...image, variantSku: null } : image) })); }
-function removeImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number) { setForm((current) => { const images = current.images.filter((_, imageIndex) => imageIndex !== index); return { ...current, images: images.map((image, imageIndex) => ({ ...image, position: imageIndex + 1, isPrimary: image.isPrimary || imageIndex === 0 })) }; }); }
+function removeImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number) { setForm((current) => { const images = current.images.filter((_, imageIndex) => imageIndex !== index); return { ...current, images: normalizeImageOrder(images) }; }); }
 function setPrimaryImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number) { setForm((current) => ({ ...current, images: current.images.map((image, imageIndex) => ({ ...image, isPrimary: imageIndex === index })) })); }
+function moveImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number, direction: -1 | 1) { setForm((current) => { const target = index + direction; if (target < 0 || target >= current.images.length) return current; const images = [...current.images]; [images[index], images[target]] = [images[target], images[index]]; return { ...current, images: normalizeImageOrder(images) }; }); }
+function normalizeImageOrder(images: FormImage[]) { return images.map((image, index) => ({ ...image, position: index + 1, isPrimary: image.isPrimary || (!images.some((candidate) => candidate.isPrimary) && index === 0) })); }
 
 function formFromProduct(product: AdminProduct): ProductForm {
   const variants = product.variants.map((variant) => ({ name: variant.name, size: variant.size, color: variant.color, surface: variant.surface, price: variant.price, sku: variant.sku, stock: variant.stock, isActive: variant.isActive }));
-  return { name: product.name, slug: product.slug, description: product.description, categoryId: product.categoryId, brandId: product.brandId, price: String(product.price), compareAtPrice: product.compareAtPrice === null ? "" : String(product.compareAtPrice), featured: product.featured, status: product.status === "published" || product.status === "PUBLISHED" ? "published" : "draft", variants, images: product.images.map((image) => ({ url: image.url, alt: image.alt, position: image.position, isPrimary: image.isPrimary, variantSku: product.variants.find((variant) => variant.id === image.variantId)?.sku ?? null })) };
+  return { name: product.name, slug: product.slug, description: product.description, categoryId: product.categoryId, brandId: product.brandId, price: String(product.price), compareAtPrice: product.compareAtPrice === null ? "" : String(product.compareAtPrice), featured: product.featured, status: product.status === "published" || product.status === "PUBLISHED" ? "published" : "draft", variants, images: product.images.map((image) => ({ id: image.id, url: image.url, alt: image.alt, storagePath: image.storagePath, mimeType: image.mimeType, sizeBytes: image.sizeBytes, position: image.position, isPrimary: image.isPrimary, variantSku: product.variants.find((variant) => variant.id === image.variantId)?.sku ?? null })) };
 }
 
 function toProductInput(form: ProductForm): AdminProductInput | null {
   const price = parseWholeNumber(form.price); const compareAtPrice = form.compareAtPrice.trim() ? parseWholeNumber(form.compareAtPrice) : null;
   if (price === null || (form.compareAtPrice.trim() && (compareAtPrice === null || compareAtPrice <= price)) || form.variants.some((variant) => !Number.isInteger(variant.stock) || variant.stock < 0 || (variant.price != null && (!Number.isInteger(variant.price) || variant.price < 1))) || form.images.some((image) => !Number.isInteger(image.position) || image.position < 1)) return null;
-  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ ...variant, name: variant.name.trim(), sku: variant.sku.trim() })), images: form.images.map((image) => ({ ...image, url: image.url.trim(), alt: image.alt.trim() })) };
+  const images = form.images.filter((image) => !image.file).map(({ id: _id, file: _file, previewUrl: _previewUrl, ...image }) => ({ ...image, url: image.url.trim(), alt: image.alt.trim() }));
+  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ ...variant, name: variant.name.trim(), sku: variant.sku.trim() })), images };
 }
+function formWithUploadPlaceholder(form: ProductForm): ProductForm {
+  const persisted = form.images.filter((image) => !image.file && image.url.trim());
+  const images = persisted.length ? form.images : [{ id: "upload-placeholder", url: CREATE_PLACEHOLDER_URL, alt: "Product image pending upload", position: 1, isPrimary: true, variantSku: null }, ...form.images];
+  return { ...form, images: normalizeImageOrder(images) };
+}
+type UploadedImage = { path: string; url: string; mimeType: string; sizeBytes: number };
+async function uploadProductImages(productId: string, files: File[], signal: AbortSignal): Promise<UploadedImage[]> {
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  const response = await fetch(`/api/internal/catalog/products/${productId}/images`, { method: "POST", body, credentials: "same-origin", signal });
+  let payload: unknown = null;
+  try { payload = await response.json(); } catch { /* error handled below */ }
+  if (!response.ok || !isUploadResponse(payload)) throw new Error(uploadErrorMessage(payload));
+  return payload.images;
+}
+function isUploadResponse(value: unknown): value is { images: UploadedImage[] } { return typeof value === "object" && value !== null && "images" in value && Array.isArray(value.images) && value.images.every((image) => typeof image === "object" && image !== null && "path" in image && typeof image.path === "string" && "url" in image && typeof image.url === "string" && "mimeType" in image && typeof image.mimeType === "string" && "sizeBytes" in image && typeof image.sizeBytes === "number" && Number.isInteger(image.sizeBytes) && image.sizeBytes > 0); }
+function replacePendingImages(baseForm: ProductForm, uploaded: UploadedImage[]): ProductForm {
+  let uploadIndex = 0;
+  const retained = baseForm.images.filter((image) => image.id !== "upload-placeholder").map((image) => {
+    if (!image.file) return image;
+    const uploadedImage = uploaded[uploadIndex++];
+    return uploadedImage
+      ? { ...image, file: undefined, previewUrl: undefined, url: uploadedImage.url, storagePath: uploadedImage.path, mimeType: uploadedImage.mimeType, sizeBytes: uploadedImage.sizeBytes }
+      : image;
+  });
+  if (uploadIndex !== uploaded.length) throw new Error("IMAGE_UPLOAD_FAILED");
+  return { ...baseForm, images: normalizeImageOrder(retained) };
+}
+function uploadErrorMessage(payload: unknown) { const code = typeof payload === "object" && payload !== null && "code" in payload ? (payload as { code?: unknown }).code : undefined; if (code === "UNSUPPORTED_IMAGE_TYPE") return "Only JPEG, PNG, and WebP images can be uploaded."; if (code === "IMAGE_SIZE_INVALID") return "Each image must be no larger than 5 MiB."; if (code === "IMAGE_LIMIT_EXCEEDED") return "A product can have at most 8 images."; if (code === "STORAGE_UNAVAILABLE") return "Image storage is temporarily unavailable. Your files were not attached."; return "Image upload failed. The product was saved without the new files."; }
 function parseWholeNumber(value: string): number | null { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : null; }
 function isProductList(value: unknown): value is AdminProductList { return typeof value === "object" && value !== null && "data" in value && Array.isArray(value.data) && "pagination" in value; }
 function isSavedProduct(value: unknown): value is AdminProduct { return typeof value === "object" && value !== null && "id" in value && typeof value.id === "string"; }
-function errorMessage(error: unknown): string { if (error instanceof Error && error.message === "INVALID_ADMIN_PRODUCT") return "The product is incomplete or invalid. Check all required fields, unique SKUs, and the primary image."; if (error instanceof Error && error.message === "CATALOG_CONFLICT") return "A product or variant SKU already uses one of these values."; if (error instanceof Error && error.message === "CATALOG_REFERENCE_NOT_FOUND") return "Choose an active category and brand."; if (error instanceof Error && error.message === "ADMIN_CSRF_INVALID") return "Your protected request expired. Refresh this page and try again."; return "The catalog change could not be completed. Try again shortly."; }
+function errorMessage(error: unknown): string { if (error instanceof Error && error.message.startsWith("Image ")) return error.message; if (error instanceof Error && error.message === "INVALID_ADMIN_PRODUCT") return "The product is incomplete or invalid. Check all required fields, unique SKUs, and the primary image."; if (error instanceof Error && error.message === "CATALOG_CONFLICT") return "A product or variant SKU already uses one of these values."; if (error instanceof Error && error.message === "CATALOG_REFERENCE_NOT_FOUND") return "Choose an active category and brand."; if (error instanceof Error && error.message === "ADMIN_CSRF_INVALID") return "Your protected request expired. Refresh this page and try again."; return "The catalog change could not be completed. Try again shortly."; }
 function statusLabel(status: AdminProduct["status"]) { return status.toLowerCase(); }
 function formatArs(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value); }
-
-
-
-
-
-
-

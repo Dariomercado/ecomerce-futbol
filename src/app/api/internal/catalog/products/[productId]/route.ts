@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/admin-authorization";
 import { requireAdminRequestIntegrity } from "@/lib/auth/request-integrity";
 import { adminCatalogService, getAdminCatalogErrorCode, getAdminCatalogErrorStatus } from "@/lib/catalog/admin-product-service";
+import { cleanupReplacedProductImages } from "@/lib/catalog/product-image-storage-cleanup";
 
 export const runtime = "nodejs";
 
@@ -17,12 +18,17 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
   try {
     const [{ productId }, input] = await Promise.all([params, parseJson(request)]);
-    const product = await adminCatalogService.updateProduct({
+    const updated = await adminCatalogService.updateProduct({
       actor: { membershipId: authorization.membership.id, actorSupabaseUserId: authorization.user.id },
       productId,
       input,
     });
-    return NextResponse.json(product);
+    const { storagePathsToDelete, ...product } = updated;
+    const cleanup = await cleanupReplacedProductImages(storagePathsToDelete ?? []);
+    return NextResponse.json({
+      ...product,
+      ...(cleanup.status === "failed" ? { storageCleanup: "failed" } : {}),
+    });
   } catch (error) {
     return catalogError(error);
   }

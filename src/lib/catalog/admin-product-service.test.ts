@@ -41,6 +41,7 @@ describe("admin catalog aggregate transactions", () => {
         updateProduct: async () => {
           throw new Error("Unexpected updateProduct call");
         },
+        listImageStoragePaths: async () => [],
         replaceVariants: async () => {
           throw new Error("Unexpected replaceVariants call");
         },
@@ -49,6 +50,9 @@ describe("admin catalog aggregate transactions", () => {
         },
         archiveProduct: async () => {
           throw new Error("Unexpected archiveProduct call");
+        },
+        restoreProduct: async () => {
+          throw new Error("Unexpected restoreProduct call");
         },
         appendAudit: async () => {
           staged.audits += 1;
@@ -73,5 +77,58 @@ describe("admin catalog aggregate transactions", () => {
     });
     expect(transactionCalls).toBe(1);
     expect(committed).toEqual({ products: 0, variants: 0, images: 0, audits: 0 });
+  });
+
+  it("restores only through the transaction and records the restore audit", async () => {
+    const calls: string[] = [];
+    const transaction: AdminCatalogRepository["transaction"] = async <T>(work: (tx: AdminCatalogTransaction) => Promise<T>): Promise<T> => work({
+      listProducts: async () => { throw new Error("Unexpected listProducts call"); },
+      createProduct: async () => { throw new Error("Unexpected createProduct call"); },
+      createVariants: async () => { throw new Error("Unexpected createVariants call"); },
+      createImages: async () => { throw new Error("Unexpected createImages call"); },
+      updateProduct: async () => { throw new Error("Unexpected updateProduct call"); },
+      listImageStoragePaths: async () => [],
+      replaceVariants: async () => { throw new Error("Unexpected replaceVariants call"); },
+      replaceImages: async () => { throw new Error("Unexpected replaceImages call"); },
+      archiveProduct: async () => { throw new Error("Unexpected archiveProduct call"); },
+      restoreProduct: async (productId) => {
+        calls.push(`restore:${productId}`);
+        return { id: productId, status: "draft", isActive: true, featured: false };
+      },
+      appendAudit: async (event) => { calls.push(`${event.action}:${event.context.status}`); },
+    });
+    const service = createAdminCatalogService({ repository: { transaction } });
+
+    await expect(service.restoreProduct({ actor, productId: "product-1" })).resolves.toEqual({
+      id: "product-1", status: "draft", isActive: true, featured: false,
+    });
+    expect(calls).toEqual(["restore:product-1", "CATALOG_PRODUCT_RESTORE:draft"]);
+  });
+
+  it("captures removed Storage paths before replacing images and never deletes legacy URLs", async () => {
+    const calls: string[] = [];
+    const transaction: AdminCatalogRepository["transaction"] = async <T>(work: (tx: AdminCatalogTransaction) => Promise<T>): Promise<T> => work({
+      listProducts: async () => { throw new Error("Unexpected listProducts call"); },
+      createProduct: async () => { throw new Error("Unexpected createProduct call"); },
+      createVariants: async () => { throw new Error("Unexpected createVariants call"); },
+      createImages: async () => { throw new Error("Unexpected createImages call"); },
+      updateProduct: async () => { calls.push("update"); },
+      listImageStoragePaths: async () => { calls.push("paths"); return ["products/product-1/removed.webp", ""]; },
+      replaceVariants: async () => { calls.push("variants"); },
+      replaceImages: async () => { calls.push("images"); },
+      archiveProduct: async () => { throw new Error("Unexpected archiveProduct call"); },
+      restoreProduct: async () => { throw new Error("Unexpected restoreProduct call"); },
+      appendAudit: async () => { calls.push("audit"); },
+    });
+    const service = createAdminCatalogService({ repository: { transaction } });
+    const inputWithStoredImage = {
+      ...input,
+      images: [{ ...input.images[0], storagePath: "products/product-1/retained.webp", mimeType: "image/webp", sizeBytes: 123 }],
+    };
+
+    await expect(service.updateProduct({ actor, productId: "product-1", input: inputWithStoredImage })).resolves.toMatchObject({
+      storagePathsToDelete: ["products/product-1/removed.webp"],
+    });
+    expect(calls).toEqual(["paths", "update", "variants", "images", "audit"]);
   });
 });

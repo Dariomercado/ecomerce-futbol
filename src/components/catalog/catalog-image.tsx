@@ -13,7 +13,17 @@ type CatalogImageProps = {
 };
 
 function isLocalCatalogAsset(src: string | null | undefined): src is string {
-  return typeof src === "string" && src.startsWith("/catalog/");
+  if (typeof src !== "string") return false;
+  if (src.startsWith("/catalog/")) return true;
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!configuredUrl) return false;
+  try {
+    const candidate = new URL(src);
+    const configured = new URL(configuredUrl);
+    return candidate.protocol === configured.protocol && candidate.hostname === configured.hostname;
+  } catch {
+    return false;
+  }
 }
 
 export function CatalogImage({

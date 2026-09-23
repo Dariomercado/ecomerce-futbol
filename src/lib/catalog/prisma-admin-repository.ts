@@ -17,6 +17,7 @@ export type AdminCatalogTransaction = {
   createVariants(productId: string, variants: AdminProductVariantInput[]): Promise<void>;
   createImages(productId: string, images: AdminProductImageInput[]): Promise<void>;
   updateProduct(productId: string, input: AdminProductInput): Promise<void>;
+  listImageStoragePaths(productId: string): Promise<string[]>;
   replaceVariants(productId: string, variants: AdminProductVariantInput[]): Promise<void>;
   replaceImages(productId: string, images: AdminProductImageInput[]): Promise<void>;
   archiveProduct(productId: string): Promise<ArchivedProduct>;
@@ -83,6 +84,14 @@ function createTransaction(database: Prisma.TransactionClient): AdminCatalogTran
       await assertMutableProduct(database, productId);
       await ensureActiveReferences(database, input);
       await database.product.update({ where: { id: productId }, data: productData(input) });
+    },
+
+    async listImageStoragePaths(productId) {
+      const images = await database.productImage.findMany({
+        where: { productId, storagePath: { not: null } },
+        select: { storagePath: true },
+      });
+      return images.flatMap((image) => image.storagePath?.trim() ? [image.storagePath.trim()] : []);
     },
 
     async replaceVariants(productId, variants) {
@@ -211,6 +220,9 @@ function imageData(productId: string, image: AdminProductImageInput, variantIds:
     variantId: image.variantSku ? variantIds.get(image.variantSku) ?? null : null,
     url: image.url.trim(),
     alt: image.alt.trim(),
+    storagePath: image.storagePath?.trim() || null,
+    mimeType: image.mimeType?.trim() || null,
+    sizeBytes: image.sizeBytes ?? null,
     position: image.position,
     isPrimary: image.isPrimary,
   };

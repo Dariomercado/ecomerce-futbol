@@ -20,6 +20,11 @@ not enter retry loops. `/plan` is optional and is not a workflow precondition.
 
 ## Resume Point
 
+Updated 2026-09-22. The next delivery slice is the admin visual polish and
+safe catalog restore work. Supabase Storage for drag-and-drop and multiple
+product images follows; roles/RBAC and final portfolio verification come
+after that.
+
 The payment implementation is functionally complete, but the
 `post-payment-operations` change is not formally archived yet. Continue under
 ordinary repository policy; retain truthful verification evidence and do not
@@ -39,11 +44,13 @@ claim a native archive result while its authority remains blocked.
 | RDD mode | Disabled at clone scope; do not enable, simulate, or substitute receipts |
 | Operational workflow | Lightweight SDD/OpenSpec planning + delegated implementation + Vitest/lint/typecheck/build/E2E under ordinary policy |
 | Native retry criterion | Published and installed Gentle AI fix, or explicit authorized authority repair |
-| Next product work | Real scheduler wiring after deployment-provider selection; application route code is not missing |
+| Production deployment | Recovered and verified on 2026-09-15; Supabase is healthy, four Prisma migrations are applied, and the seeded catalog loads in production |
 | Catalog UI data source | Home, catalog, and detail use public catalog data |
-| Authentication decision | Supabase Auth only; implementation is a future slice |
+| Authentication decision | Supabase Auth only; Magic Link sign-in and callback/auth boundary exist locally. Persistent roles/RBAC are not finished, and deployment still requires verification |
+| Admin catalog | CRUD, archive/restore, request-integrity/CSRF protection, authorization, audit logging, and focused tests exist locally; the current slice also improves admin form controls visually |
 | Commercial data | Prisma + PostgreSQL remain authoritative |
 | Checkout identity | Guest checkout allowed; customer identity is optional |
+| Deployment configuration | Netlify Production uses Supavisor Transaction pooler on port 6543 with `?pgbouncer=true`; public GitHub repository and scheduler remain configured |
 
 ## Current Implementation
 
@@ -65,11 +72,40 @@ claim a native archive result while its authority remains blocked.
   transitions, idempotency, and sandbox refund proof. The focused PAID
   cancellation test covers `422 ORDER_NOT_CANCELLABLE` with zero provider calls.
 - Slice 6.2D is implemented: CardForm, tokenization, 3DS, and checkout UI.
-- The remaining scheduler work is deployment integration: select the provider
-  and wire the real scheduler. It is not missing application route code.
+- Admin catalog management is implemented locally with CRUD, safe archive/
+  restore, request-integrity/CSRF checks, authorization, audit logging, and
+  focused tests. Admin inputs, selects, and textareas also received visual
+  improvements.
+- Netlify Production is configured with the Supavisor Transaction pooler; GitHub
+  Actions remains configured for scheduled reconciliation.
+- Supabase Magic Link sign-in, callback handling, and the server-side auth
+  boundary are present locally. Persistent roles/RBAC remain future work, so
+  this is not yet a complete authentication or admin feature release.
+
+## Production recovery (2026-09-15)
+
+- Supabase Free paused the project after inactivity. The project was resumed and
+  verified healthy; production catalog reads recovered.
+- GitHub Actions **Reconcile payments** run `#406` completed successfully after
+  configuring the endpoint and reconciliation secrets in GitHub, and the
+  reconciliation plus Mercado Pago server secrets in Netlify.
+- The database credential was rotated. The Netlify Prisma connection uses the
+  Supavisor Transaction Pooler and requires `?pgbouncer=true`; catalog reads
+  were verified again after the update.
+- `POST_PAYMENT_ADMIN_TOKEN` has not been verified in Netlify. Do not claim
+  that cancellation or refund administration is operational until it is
+  separately configured and verified.
 
 ## Scope Boundaries
 
 - Keep public catalog APIs read-only.
-- Preserve the deployment-provider decision before wiring a real scheduler.
+- Preserve the configured production scheduler and deployment integration.
 - Checkout must work without authentication when it is implemented.
+
+## Next slices
+
+1. Deliver the admin visual polish and safe catalog restore slice.
+2. Add Supabase Storage support for drag-and-drop uploads and multiple product
+   images.
+3. Complete persistent roles/RBAC.
+4. Run final verification, deployment checks, and portfolio documentation.

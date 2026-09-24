@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useMemo, useState } from "react";
 
 import { mutateAdminCatalog } from "@/app/admin/actions";
 import type { AdminProductImageInput, AdminProductInput, AdminProductStatus, AdminProductVariantInput } from "@/lib/catalog/admin-contracts";
@@ -17,6 +17,8 @@ type AdminProduct = Omit<AdminProductInput, "variants" | "images" | "status"> & 
 };
 
 type AdminProductList = { data: AdminProduct[]; pagination: PaginationMeta };
+type ProductFormVariant = AdminProductVariantInput & { rowKey: string };
+type ProductFormImage = AdminProductImageInput & { rowKey: string };
 type ProductForm = {
   name: string;
   slug: string;
@@ -27,32 +29,37 @@ type ProductForm = {
   compareAtPrice: string;
   featured: boolean;
   status: AdminProductStatus;
-  variants: Array<AdminProductVariantInput>;
-  images: Array<AdminProductImageInput>;
+  variants: ProductFormVariant[];
+  images: ProductFormImage[];
 };
 
-const EMPTY_FORM: ProductForm = {
-  name: "",
-  slug: "",
-  description: "",
-  categoryId: "",
-  brandId: "",
-  price: "",
-  compareAtPrice: "",
-  featured: false,
-  status: "draft",
-  variants: [{ name: "", sku: "", stock: 0, isActive: true, size: null, color: null, surface: null, price: null }],
-  images: [{ url: "", alt: "", position: 1, isPrimary: true, variantSku: null }],
-};
+let nextRowKey = 0;
+function createRowKey(prefix: "variant" | "image") { nextRowKey += 1; return `${prefix}-${nextRowKey}`; }
+function createEmptyForm(): ProductForm {
+  return {
+    name: "",
+    slug: "",
+    description: "",
+    categoryId: "",
+    brandId: "",
+    price: "",
+    compareAtPrice: "",
+    featured: false,
+    status: "draft",
+    variants: [{ rowKey: createRowKey("variant"), name: "", sku: "", stock: 0, isActive: true, size: null, color: null, surface: null, price: null }],
+    images: [{ rowKey: createRowKey("image"), url: "", alt: "", position: 1, isPrimary: true, variantSku: null }],
+  };
+}
 
 export function AdminCatalogCrud() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [categories, setCategories] = useState<CategorySummary[]>([]);
   const [brands, setBrands] = useState<BrandSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
+  const [form, setForm] = useState<ProductForm>(createEmptyForm);
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [mutationState, setMutationState] = useState<"idle" | "saving" | "archiving">("idle");
+  const [mutationState, setMutationState] = useState<"idle" | "saving" | "archiving" | "restoring">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
   const selectedProduct = products.find((product) => product.id === selectedId) ?? null;
@@ -96,14 +103,20 @@ export function AdminCatalogCrud() {
 
   function startCreate() {
     setSelectedId(null);
-    setForm(EMPTY_FORM);
+    setForm(createEmptyForm());
+    setSlugManuallyEdited(false);
     setMessage(null);
   }
 
   function startEdit(product: AdminProduct) {
     setSelectedId(product.id);
     setForm(formFromProduct(product));
+    setSlugManuallyEdited(true);
     setMessage(null);
+  }
+
+  function updateProductName(name: string) {
+    setForm((current) => ({ ...current, name, slug: slugManuallyEdited ? current.slug : slugifyProductName(name) }));
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -128,6 +141,7 @@ export function AdminCatalogCrud() {
       if (!isSavedProduct(saved)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
       setSelectedId(saved.id);
       setForm(formFromProduct(saved));
+      setSlugManuallyEdited(true);
       setMessage(isEditing ? "Product updated." : "Product created.");
       await loadCatalog();
     } catch (error) {
@@ -139,12 +153,28 @@ export function AdminCatalogCrud() {
 
   async function archiveProduct() {
     if (!selectedId || isArchived) return;
+    if (!window.confirm(`Archive ${selectedProduct?.name ?? "this product"}? It will be removed from the active catalog while its data is retained.`)) return;
     setMutationState("archiving");
     setMessage(null);
     try {
       const result = await mutateAdminCatalog({ operation: "archive", productId: selectedId });
       if (!result.ok) throw new Error(result.code);
       setMessage("Product archived. It remains in the catalog history and cannot be edited.");
+      await loadCatalog();
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setMutationState("idle");
+    }
+  }
+
+  async function restoreProduct() {
+    if (!selectedId || !isArchived) return;
+    setMutationState("restoring");
+    setMessage(null);
+    try {
+      const result = await mutateAdminCatalog({ operation: "restore", productId: selectedId });
+      if (!result.ok) throw new Error(result.code);
       await loadCatalog();
     } catch (error) {
       setMessage(errorMessage(error));
@@ -174,7 +204,7 @@ export function AdminCatalogCrud() {
         {message ? <p className="mt-4 rounded-md bg-muted p-3 text-sm" role="status">{message}</p> : null}
         <form className="mt-6 space-y-7" onSubmit={saveProduct}>
           <fieldset disabled={mutationState !== "idle" || isArchived} className="space-y-5 disabled:cursor-not-allowed disabled:opacity-60">
-            <div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><input required value={form.name} onChange={(event) => updateForm(setForm, "name", event.target.value)} /></Field><Field label="Slug"><input pattern="[a-z0-9]+(-[a-z0-9]+)*" required value={form.slug} onChange={(event) => updateForm(setForm, "slug", event.target.value)} /></Field></div>
+            <div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><input required value={form.name} onChange={(event) => updateProductName(event.target.value)} /></Field><Field label="Slug"><input pattern="[a-z0-9]+(-[a-z0-9]+)*" required value={form.slug} onChange={(event) => { setSlugManuallyEdited(true); updateForm(setForm, "slug", event.target.value); }} /></Field></div>
             <Field label="Description"><textarea required rows={4} value={form.description} onChange={(event) => updateForm(setForm, "description", event.target.value)} /></Field>
             <div className="grid gap-4 sm:grid-cols-2"><Field label="Category"><select required value={form.categoryId} onChange={(event) => updateForm(setForm, "categoryId", event.target.value)}><option value="">Select a category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></Field><Field label="Brand"><select required value={form.brandId} onChange={(event) => updateForm(setForm, "brandId", event.target.value)}><option value="">Select a brand</option>{brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></Field></div>
             <div className="grid gap-4 sm:grid-cols-3"><Field label="Price (ARS)"><input min="1" required step="1" type="number" value={form.price} onChange={(event) => updateForm(setForm, "price", event.target.value)} /></Field><Field label="Compare at price (ARS)"><input min="1" step="1" type="number" value={form.compareAtPrice} onChange={(event) => updateForm(setForm, "compareAtPrice", event.target.value)} /></Field><Field label="Status"><select value={form.status} onChange={(event) => updateForm(setForm, "status", event.target.value as AdminProductStatus)}><option value="draft">Draft</option><option value="published">Published</option></select></Field></div>
@@ -182,7 +212,7 @@ export function AdminCatalogCrud() {
             <VariantFields form={form} setForm={setForm} />
             <ImageFields availableVariantSkus={availableVariantSkus} form={form} setForm={setForm} />
           </fieldset>
-          <div className="flex flex-wrap gap-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60" disabled={mutationState !== "idle" || isArchived} type="submit">{mutationState === "saving" ? "Saving..." : isEditing ? "Save complete product" : "Create product"}</button>{isEditing ? <button className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive disabled:opacity-60" disabled={mutationState !== "idle" || isArchived} onClick={() => void archiveProduct()} type="button">{mutationState === "archiving" ? "Archiving..." : isArchived ? "Archived" : "Archive product"}</button> : null}</div>
+          <div className="flex flex-wrap gap-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60" disabled={mutationState !== "idle" || isArchived} type="submit">{mutationState === "saving" ? "Saving..." : isEditing ? "Save complete product" : "Create product"}</button>{isEditing && isArchived ? <button className="rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-60" disabled={mutationState !== "idle"} onClick={() => void restoreProduct()} type="button">{mutationState === "restoring" ? "Restoring..." : "Restore as draft"}</button> : null}{isEditing && !isArchived ? <button className="rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive disabled:opacity-60" disabled={mutationState !== "idle"} onClick={() => void archiveProduct()} type="button">{mutationState === "archiving" ? "Archiving..." : "Archive product"}</button> : null}</div>
         </form>
       </div>
     </section>
@@ -190,14 +220,25 @@ export function AdminCatalogCrud() {
 }
 
 function VariantFields({ form, setForm }: { form: ProductForm; setForm: React.Dispatch<React.SetStateAction<ProductForm>> }) {
-  return <fieldset className="space-y-3 border-t pt-5"><legend className="text-lg font-semibold">Variants</legend>{form.variants.map((variant, index) => <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" key={`${variant.sku}-${index}`}><Field label={`Variant name ${index + 1}`}><input required value={variant.name} onChange={(event) => updateVariant(setForm, index, "name", event.target.value)} /></Field><Field label={`SKU ${index + 1}`}><input required value={variant.sku} onChange={(event) => updateVariant(setForm, index, "sku", event.target.value)} /></Field><Field label={`Stock ${index + 1}`}><input min="0" required step="1" type="number" value={variant.stock} onChange={(event) => updateVariant(setForm, index, "stock", Number(event.target.value))} /></Field><Field label={`Variant price ${index + 1} (optional)`}><input min="1" step="1" type="number" value={variant.price ?? ""} onChange={(event) => updateVariant(setForm, index, "price", event.target.value ? Number(event.target.value) : null)} /></Field><Field label={`Size ${index + 1} (optional)`}><input value={variant.size ?? ""} onChange={(event) => updateVariant(setForm, index, "size", event.target.value || null)} /></Field><Field label={`Color ${index + 1} (optional)`}><input value={variant.color ?? ""} onChange={(event) => updateVariant(setForm, index, "color", event.target.value || null)} /></Field><Field label={`Surface ${index + 1} (optional)`}><input value={variant.surface ?? ""} onChange={(event) => updateVariant(setForm, index, "surface", event.target.value || null)} /></Field><label className="flex items-center gap-2 self-end text-sm font-medium"><input checked={variant.isActive} onChange={(event) => updateVariant(setForm, index, "isActive", event.target.checked)} type="checkbox" /> Active</label>{form.variants.length > 1 ? <button className="justify-self-start text-sm font-medium text-destructive sm:col-span-2" onClick={() => removeVariant(setForm, index)} type="button">Remove variant</button> : null}</div>)}<button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, variants: [...current.variants, { name: "", sku: "", stock: 0, isActive: true, size: null, color: null, surface: null, price: null }] }))} type="button">Add variant</button></fieldset>;
+  return <fieldset className="space-y-3 border-t pt-5"><legend className="text-lg font-semibold">Variants</legend>{form.variants.map((variant, index) => <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" key={variant.rowKey}><Field label={`Variant name ${index + 1}`}><input required value={variant.name} onChange={(event) => updateVariant(setForm, index, "name", event.target.value)} /></Field><Field helperText="A unique inventory code used to identify this exact variant." label={`SKU ${index + 1}`}><input required value={variant.sku} onChange={(event) => updateVariant(setForm, index, "sku", event.target.value)} /></Field><Field label={`Stock ${index + 1}`}><input min="0" required step="1" type="number" value={variant.stock} onChange={(event) => updateVariant(setForm, index, "stock", Number(event.target.value))} /></Field><Field label={`Variant price ${index + 1} (optional)`}><input min="1" step="1" type="number" value={variant.price ?? ""} onChange={(event) => updateVariant(setForm, index, "price", event.target.value ? Number(event.target.value) : null)} /></Field><Field label={`Size ${index + 1} (optional)`}><input value={variant.size ?? ""} onChange={(event) => updateVariant(setForm, index, "size", event.target.value || null)} /></Field><Field label={`Color ${index + 1} (optional)`}><input value={variant.color ?? ""} onChange={(event) => updateVariant(setForm, index, "color", event.target.value || null)} /></Field><Field label={`Surface ${index + 1} (optional)`}><input value={variant.surface ?? ""} onChange={(event) => updateVariant(setForm, index, "surface", event.target.value || null)} /></Field><label className="flex items-center gap-2 self-end text-sm font-medium"><input checked={variant.isActive} onChange={(event) => updateVariant(setForm, index, "isActive", event.target.checked)} type="checkbox" /> Active</label>{form.variants.length > 1 ? <button className="justify-self-start text-sm font-medium text-destructive sm:col-span-2" onClick={() => removeVariant(setForm, index)} type="button">Remove variant</button> : null}</div>)}<button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, variants: [...current.variants, { rowKey: createRowKey("variant"), name: "", sku: "", stock: 0, isActive: true, size: null, color: null, surface: null, price: null }] }))} type="button">Add variant</button></fieldset>;
 }
 
 function ImageFields({ availableVariantSkus, form, setForm }: { availableVariantSkus: string[]; form: ProductForm; setForm: React.Dispatch<React.SetStateAction<ProductForm>> }) {
-  return <fieldset className="space-y-3 border-t pt-5"><legend className="text-lg font-semibold">Images</legend>{form.images.map((image, index) => <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" key={`${image.url}-${index}`}><Field label={`Image URL ${index + 1}`}><input required type="url" value={image.url} onChange={(event) => updateImage(setForm, index, "url", event.target.value)} /></Field><Field label={`Alt text ${index + 1}`}><input required value={image.alt} onChange={(event) => updateImage(setForm, index, "alt", event.target.value)} /></Field><Field label={`Image position ${index + 1}`}><input min="1" required step="1" type="number" value={image.position} onChange={(event) => updateImage(setForm, index, "position", Number(event.target.value))} /></Field><Field label={`Linked variant ${index + 1}`}><select value={image.variantSku ?? ""} onChange={(event) => updateImage(setForm, index, "variantSku", event.target.value || null)}><option value="">No variant link</option>{availableVariantSkus.map((sku) => <option key={sku} value={sku}>{sku}</option>)}</select></Field><label className="flex items-center gap-2 text-sm font-medium"><input checked={image.isPrimary} onChange={() => setPrimaryImage(setForm, index)} type="radio" name="primary-image" /> Primary image</label>{form.images.length > 1 ? <button className="justify-self-start text-sm font-medium text-destructive sm:col-span-2" onClick={() => removeImage(setForm, index)} type="button">Remove image</button> : null}</div>)}<button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, images: [...current.images, { url: "", alt: "", position: current.images.length + 1, isPrimary: false, variantSku: null }] }))} type="button">Add image</button></fieldset>;
+  return <fieldset className="space-y-3 border-t pt-5"><legend className="text-lg font-semibold">Images</legend>{form.images.map((image, index) => <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" key={image.rowKey}><Field helperText="Paste the public HTTPS address where the product image is hosted." label={`Image URL ${index + 1}`}><input required type="url" value={image.url} onChange={(event) => updateImage(setForm, index, "url", event.target.value)} /></Field><Field helperText="Describe the image for screen readers and when it cannot load." label={`Alt text ${index + 1}`}><input required value={image.alt} onChange={(event) => updateImage(setForm, index, "alt", event.target.value)} /></Field><Field helperText="Controls the display order; lower numbers appear first." label={`Image position ${index + 1}`}><input min="1" required step="1" type="number" value={image.position} onChange={(event) => updateImage(setForm, index, "position", Number(event.target.value))} /></Field><Field label={`Linked variant ${index + 1}`}><select value={image.variantSku ?? ""} onChange={(event) => updateImage(setForm, index, "variantSku", event.target.value || null)}><option value="">No variant link</option>{availableVariantSkus.map((sku) => <option key={sku} value={sku}>{sku}</option>)}</select></Field><label className="flex items-center gap-2 text-sm font-medium"><input checked={image.isPrimary} onChange={() => setPrimaryImage(setForm, index)} type="radio" name="primary-image" /> Primary image</label>{form.images.length > 1 ? <button className="justify-self-start text-sm font-medium text-destructive sm:col-span-2" onClick={() => removeImage(setForm, index)} type="button">Remove image</button> : null}</div>)}<button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => setForm((current) => ({ ...current, images: [...current.images, { rowKey: createRowKey("image"), url: "", alt: "", position: current.images.length + 1, isPrimary: false, variantSku: null }] }))} type="button">Add image</button></fieldset>;
 }
 
-function Field({ children, label }: { children: React.ReactNode; label: string }) { return <label className="grid gap-1 text-sm font-medium">{label}{children}</label>; }
+const fieldControlClassName = "mt-1 min-h-10 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+
+function Field({ children, helperText, label }: { children: React.ReactNode; helperText?: string; label: string }) {
+  const generatedControlId = useId();
+  const controlId = isValidElement<{ id?: string }>(children) ? children.props.id ?? generatedControlId : generatedControlId;
+  const helperId = `${controlId}-helper`;
+  const control = isValidElement<{ "aria-describedby"?: string; className?: string; id?: string }>(children)
+    ? cloneElement(children, { "aria-describedby": helperText ? helperId : children.props["aria-describedby"], className: `${fieldControlClassName} ${children.props.className ?? ""}`, id: children.props.id ?? controlId })
+    : children;
+
+  return <div className="grid gap-1 text-sm"><label className="font-medium" htmlFor={controlId}>{label}</label>{control}{helperText ? <p className="text-xs text-muted-foreground" id={helperId}>{helperText}</p> : null}</div>;
+}
 
 function updateForm<K extends Exclude<keyof ProductForm, "variants" | "images">>(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, key: K, value: ProductForm[K]) { setForm((current) => ({ ...current, [key]: value })); }
 function updateVariant<K extends keyof AdminProductVariantInput>(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number, key: K, value: AdminProductVariantInput[K]) { setForm((current) => ({ ...current, variants: current.variants.map((variant, variantIndex) => variantIndex === index ? { ...variant, [key]: value } : variant) })); }
@@ -207,15 +248,16 @@ function removeImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>,
 function setPrimaryImage(setForm: React.Dispatch<React.SetStateAction<ProductForm>>, index: number) { setForm((current) => ({ ...current, images: current.images.map((image, imageIndex) => ({ ...image, isPrimary: imageIndex === index })) })); }
 
 function formFromProduct(product: AdminProduct): ProductForm {
-  const variants = product.variants.map((variant) => ({ name: variant.name, size: variant.size, color: variant.color, surface: variant.surface, price: variant.price, sku: variant.sku, stock: variant.stock, isActive: variant.isActive }));
-  return { name: product.name, slug: product.slug, description: product.description, categoryId: product.categoryId, brandId: product.brandId, price: String(product.price), compareAtPrice: product.compareAtPrice === null ? "" : String(product.compareAtPrice), featured: product.featured, status: product.status === "published" || product.status === "PUBLISHED" ? "published" : "draft", variants, images: product.images.map((image) => ({ url: image.url, alt: image.alt, position: image.position, isPrimary: image.isPrimary, variantSku: product.variants.find((variant) => variant.id === image.variantId)?.sku ?? null })) };
+  const variants = product.variants.map((variant) => ({ rowKey: `variant-${variant.id}`, name: variant.name, size: variant.size, color: variant.color, surface: variant.surface, price: variant.price, sku: variant.sku, stock: variant.stock, isActive: variant.isActive }));
+  return { name: product.name, slug: product.slug, description: product.description, categoryId: product.categoryId, brandId: product.brandId, price: String(product.price), compareAtPrice: product.compareAtPrice === null ? "" : String(product.compareAtPrice), featured: product.featured, status: product.status === "published" || product.status === "PUBLISHED" ? "published" : "draft", variants, images: product.images.map((image) => ({ rowKey: `image-${image.id}`, url: image.url, alt: image.alt, position: image.position, isPrimary: image.isPrimary, variantSku: product.variants.find((variant) => variant.id === image.variantId)?.sku ?? null })) };
 }
 
 function toProductInput(form: ProductForm): AdminProductInput | null {
   const price = parseWholeNumber(form.price); const compareAtPrice = form.compareAtPrice.trim() ? parseWholeNumber(form.compareAtPrice) : null;
   if (price === null || (form.compareAtPrice.trim() && (compareAtPrice === null || compareAtPrice <= price)) || form.variants.some((variant) => !Number.isInteger(variant.stock) || variant.stock < 0 || (variant.price != null && (!Number.isInteger(variant.price) || variant.price < 1))) || form.images.some((image) => !Number.isInteger(image.position) || image.position < 1)) return null;
-  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ ...variant, name: variant.name.trim(), sku: variant.sku.trim() })), images: form.images.map((image) => ({ ...image, url: image.url.trim(), alt: image.alt.trim() })) };
+  return { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), categoryId: form.categoryId, brandId: form.brandId, price, compareAtPrice, featured: form.featured, status: form.status, variants: form.variants.map((variant) => ({ name: variant.name.trim(), sku: variant.sku.trim(), stock: variant.stock, isActive: variant.isActive, size: variant.size, color: variant.color, surface: variant.surface, price: variant.price })), images: form.images.map((image) => ({ url: image.url.trim(), alt: image.alt.trim(), position: image.position, isPrimary: image.isPrimary, variantSku: image.variantSku })) };
 }
+function slugifyProductName(value: string) { return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 function parseWholeNumber(value: string): number | null { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : null; }
 function isProductList(value: unknown): value is AdminProductList { return typeof value === "object" && value !== null && "data" in value && Array.isArray(value.data) && "pagination" in value; }
 function isSavedProduct(value: unknown): value is AdminProduct { return typeof value === "object" && value !== null && "id" in value && typeof value.id === "string"; }

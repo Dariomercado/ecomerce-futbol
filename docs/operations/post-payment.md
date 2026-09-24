@@ -80,6 +80,23 @@ and the GitHub repository secret together, then redeploy the application before
 triggering a run. If a scheduled run fails, inspect only its HTTP outcome and
 redacted GitHub Actions metadata; do not copy request headers, secret values, or
 response bodies into tickets or logs.
+
+## Production recovery record (2026-09-15)
+
+The scheduler and catalog were revalidated after recovering the production
+database dependency:
+
+- The Supabase Free project had paused after inactivity and was resumed.
+- GitHub Actions **Reconcile payments** run `#406` then completed successfully.
+- GitHub holds the scheduler endpoint and cron secrets. Netlify holds the
+  matching reconciliation cron secret plus Mercado Pago server secrets.
+- After the database credential rotation, Prisma required the Supavisor
+  Transaction Pooler connection to include `?pgbouncer=true`. Catalog reads
+  succeeded after that configuration was updated.
+
+No secret values or endpoint URLs are recorded here. `POST_PAYMENT_ADMIN_TOKEN`
+was not verified during this recovery; treat the temporary cancel/refund
+boundary as unavailable until that separate token is configured and verified.
 ## Rotate or disable access
 
 The temporary adapter accepts one configured token at a time.

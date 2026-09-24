@@ -50,6 +50,9 @@ describe("admin catalog aggregate transactions", () => {
         archiveProduct: async () => {
           throw new Error("Unexpected archiveProduct call");
         },
+        restoreProduct: async () => {
+          throw new Error("Unexpected restoreProduct call");
+        },
         appendAudit: async () => {
           staged.audits += 1;
           throw new Error("ADMIN_AUDIT_UNAVAILABLE");

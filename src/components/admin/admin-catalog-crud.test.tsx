@@ -22,7 +22,7 @@ function mockInitialLoad(fetchMock: ReturnType<typeof vi.fn>) { fetchMock.mockRe
 
 describe("AdminCatalogCrud", () => {
   const fetchMock = vi.fn();
-  beforeEach(() => { vi.stubGlobal("fetch", fetchMock); fetchMock.mockReset(); mutateAdminCatalog.mockReset(); });
+  beforeEach(() => { vi.stubGlobal("fetch", fetchMock); vi.stubGlobal("confirm", vi.fn(() => true)); fetchMock.mockReset(); mutateAdminCatalog.mockReset(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("loads catalog and taxonomy before rendering an editable product", async () => {
@@ -31,6 +31,48 @@ describe("AdminCatalogCrud", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
     expect(screen.getByLabelText("Linked variant 1")).toHaveValue("CTRL-GRN-40");
     expect(screen.getByLabelText("Status")).toHaveValue("published");
+  });
+
+  it("keeps variant and image controls focused while their mutable values change", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+
+    const sku = screen.getByLabelText("SKU 1");
+    sku.focus();
+    fireEvent.change(sku, { target: { value: "CTRL-GRN-41" } });
+    expect(sku).toHaveFocus();
+
+    const imageUrl = screen.getByLabelText("Image URL 1");
+    imageUrl.focus();
+    fireEvent.change(imageUrl, { target: { value: "https://example.test/updated-control.jpg" } });
+    expect(imageUrl).toHaveFocus();
+  });
+
+  it("generates a slug from the name until the slug is manually edited", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    const name = await screen.findByLabelText("Name");
+    const slug = screen.getByLabelText("Slug");
+
+    fireEvent.change(name, { target: { value: "Botín Fútbol Pro" } });
+    expect(slug).toHaveValue("botin-futbol-pro");
+
+    fireEvent.change(slug, { target: { value: "custom-product-slug" } });
+    fireEvent.change(name, { target: { value: "Botín Fútbol Elite" } });
+    expect(slug).toHaveValue("custom-product-slug");
+  });
+
+  it("shows bordered controls and concise guidance for catalog-specific fields", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+
+    expect(screen.getByLabelText("Name")).toHaveClass("border-2", "border-input");
+    expect(screen.getByText("A unique inventory code used to identify this exact variant.")).toBeInTheDocument();
+    expect(screen.getByText("Paste the public HTTPS address where the product image is hosted.")).toBeInTheDocument();
+    expect(screen.getByText("Controls the display order; lower numbers appear first.")).toBeInTheDocument();
+    expect(screen.getByText("Describe the image for screen readers and when it cannot load.")).toBeInTheDocument();
   });
 
   it("sends complete aggregates through the server action without a client CSRF token", async () => {
@@ -51,5 +93,19 @@ describe("AdminCatalogCrud", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archive product" }));
     await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledWith({ operation: "archive", productId: product.id }));
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("DELETE"))).toBe(false);
+  });
+
+  it("restores an archived product as a draft through the server action", async () => {
+    const archivedPage = { data: [{ ...product, status: "ARCHIVED", isActive: false, featured: false }], pagination: page.pagination };
+    fetchMock.mockResolvedValueOnce(response(archivedPage)).mockResolvedValueOnce(response([category])).mockResolvedValueOnce(response([brand]));
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...product, status: "draft", isActive: true, featured: false } });
+    fetchMock.mockResolvedValueOnce(response(page))
+      .mockResolvedValueOnce(response([category]))
+      .mockResolvedValueOnce(response([brand]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore as draft" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenLastCalledWith({ operation: "restore", productId: product.id }));
   });
 });

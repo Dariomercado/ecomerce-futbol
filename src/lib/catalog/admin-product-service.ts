@@ -20,6 +20,7 @@ export type AdminCatalogErrorCode =
   | "CATALOG_PRODUCT_NOT_FOUND"
   | "CATALOG_CONFLICT"
   | "CATALOG_ARCHIVE_CONFLICT"
+  | "CATALOG_RESTORE_CONFLICT"
   | "ADMIN_AUDIT_UNAVAILABLE"
   | "ADMIN_CATALOG_UNAVAILABLE";
 
@@ -33,6 +34,7 @@ export class AdminCatalogError extends Error {
 type CreateProductCommand = { actor: AdminCatalogActor; input: unknown };
 type UpdateProductCommand = CreateProductCommand & { productId: string };
 type ArchiveProductCommand = { actor: AdminCatalogActor; productId: string };
+type RestoreProductCommand = { actor: AdminCatalogActor; productId: string };
 type ListProductsCommand = { actor: AdminCatalogActor; page: number; limit: number };
 
 export function createAdminCatalogService({ repository = createPrismaAdminCatalogRepository() }: { repository?: AdminCatalogRepository } = {}) {
@@ -74,6 +76,14 @@ export function createAdminCatalogService({ repository = createPrismaAdminCatalo
       return execute(repository, async (tx) => {
         const product = await tx.archiveProduct(productId);
         await appendAudit(tx, actor, "CATALOG_PRODUCT_ARCHIVE", "Product", productId, "SUCCEEDED", { status: "archived" });
+        return product;
+      });
+    },
+
+    async restoreProduct({ actor, productId }: RestoreProductCommand) {
+      return execute(repository, async (tx) => {
+        const product = await tx.restoreProduct(productId);
+        await appendAudit(tx, actor, "CATALOG_PRODUCT_RESTORE", "Product", productId, "SUCCEEDED", { status: "draft" });
         return product;
       });
     },
@@ -123,7 +133,7 @@ function normalizeCatalogError(error: unknown): AdminCatalogError {
 }
 
 function isCatalogErrorCode(value: string): value is AdminCatalogErrorCode {
-  return ["INVALID_ADMIN_PRODUCT", "CATALOG_REFERENCE_NOT_FOUND", "CATALOG_PRODUCT_NOT_FOUND", "CATALOG_CONFLICT", "CATALOG_ARCHIVE_CONFLICT", "ADMIN_AUDIT_UNAVAILABLE", "ADMIN_CATALOG_UNAVAILABLE"].includes(value);
+  return ["INVALID_ADMIN_PRODUCT", "CATALOG_REFERENCE_NOT_FOUND", "CATALOG_PRODUCT_NOT_FOUND", "CATALOG_CONFLICT", "CATALOG_ARCHIVE_CONFLICT", "CATALOG_RESTORE_CONFLICT", "ADMIN_AUDIT_UNAVAILABLE", "ADMIN_CATALOG_UNAVAILABLE"].includes(value);
 }
 
 function aggregateContext(input: AdminProductInput): AdminAuditContext {

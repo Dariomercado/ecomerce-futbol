@@ -28,7 +28,9 @@ describe("AdminCatalogCrud", () => {
   it("loads catalog and taxonomy before rendering an editable product", async () => {
     mockInitialLoad(fetchMock);
     render(<AdminCatalogCrud />);
-    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+    const productButton = await screen.findByRole("button", { name: /Control FG/ });
+    expect(productButton).toHaveTextContent(/published - ARS/);
+    fireEvent.click(productButton);
     expect(screen.getByLabelText("Linked variant 1")).toHaveValue("CTRL-GRN-40");
     expect(screen.getByLabelText("Status")).toHaveValue("published");
   });
@@ -112,6 +114,19 @@ describe("AdminCatalogCrud", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
     await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledWith({ operation: "update", productId: product.id, input: expect.any(Object) }));
     expect(mutateAdminCatalog.mock.calls[0][0].input).toMatchObject({ name: product.name, slug: product.slug, variants: [{ sku: "CTRL-GRN-40" }] });
+  });
+
+  it("explains that a conflicting slug or SKU must be made unique", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: false, code: "CATALOG_CONFLICT" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "A product slug or variant SKU is already in use. Choose a unique slug and check every SKU, then try again.",
+    );
   });
 
   it("creates and archives through the existing server-mediated operations", async () => {

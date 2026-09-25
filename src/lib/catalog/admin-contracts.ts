@@ -14,6 +14,9 @@ export type AdminProductVariantInput = {
 export type AdminProductImageInput = {
   url: string;
   alt: string;
+  storagePath?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
   position: number;
   isPrimary: boolean;
   variantSku?: string | null;
@@ -130,6 +133,9 @@ function validateImages(images: unknown[], variants: unknown[] | null, issues: A
     }
     requireNonEmptyString(image, "url", issues, field);
     requireNonEmptyString(image, "alt", issues, field);
+    if (image.storagePath !== undefined && image.storagePath !== null && !isNonEmptyString(image.storagePath)) issue(issues, `${field}.storagePath`, "storagePath must be a non-empty string when provided.");
+    if (image.mimeType !== undefined && image.mimeType !== null && !isNonEmptyString(image.mimeType)) issue(issues, `${field}.mimeType`, "mimeType must be a non-empty string when provided.");
+    if (image.sizeBytes !== undefined && image.sizeBytes !== null && (typeof image.sizeBytes !== "number" || !Number.isInteger(image.sizeBytes) || image.sizeBytes <= 0)) issue(issues, `${field}.sizeBytes`, "sizeBytes must be a positive integer when provided.");
     requirePositiveInteger(image.position, `${field}.position`, issues);
     if (isPositiveInteger(image.position)) {
       if (positions.has(image.position)) issue(issues, `${field}.position`, "image positions must be unique.");

@@ -22,7 +22,7 @@ const config = { url: "https://storage.example.test", serviceRoleKey: "server-on
 const pngSignature = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
 
 function makeFile(name = "ball.png", type = "image/png", bytes: Uint8Array = pngSignature) {
-  return new File([bytes], name, { type });
+  return new File([new Uint8Array(bytes).buffer], name, { type });
 }
 
 function requestWithFiles(files: File[]) {

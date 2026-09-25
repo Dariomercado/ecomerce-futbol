@@ -55,11 +55,11 @@ describe("AdminCatalogCrud", () => {
     const name = await screen.findByLabelText("Name");
     const slug = screen.getByLabelText("Slug");
 
-    fireEvent.change(name, { target: { value: "BotÃ­n FÃºtbol Pro" } });
+    fireEvent.change(name, { target: { value: "Botín Fútbol Pro" } });
     expect(slug).toHaveValue("botin-futbol-pro");
 
     fireEvent.change(slug, { target: { value: "custom-product-slug" } });
-    fireEvent.change(name, { target: { value: "BotÃ­n FÃºtbol Elite" } });
+    fireEvent.change(name, { target: { value: "Botín Fútbol Elite" } });
     expect(slug).toHaveValue("custom-product-slug");
   });
 

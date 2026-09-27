@@ -54,7 +54,7 @@ async function getSignInNotice(searchParams?: SignInSearchParams) {
   return null;
 }
 
-export default async function SignInPage({ searchParams }: { searchParams?: SignInSearchParams } = {}) {
+export default async function SignInPage({ searchParams }: { searchParams?: SignInSearchParams }) {
   const notice = await getSignInNotice(searchParams);
 
   return (

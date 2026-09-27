@@ -13,6 +13,11 @@ export type SupportedEmailTokenType = "email" | "invite" | "magiclink";
 export const adminRedirectPath = "/admin";
 
 type Environment = Record<string, string | undefined>;
+type VerifiedUserClient = {
+  auth: {
+    getUser(): Promise<{ data: { user: { id: string } | null }; error: unknown | null }>;
+  };
+};
 
 /**
  * Returns only the browser-safe Supabase connection settings. Authentication
@@ -66,4 +71,21 @@ export async function createSupabaseServerClient(config: SupabaseServerConfig) {
       },
     },
   });
+}
+
+/** Resolve navigation from the Auth server, not from unverified session cookies. */
+export async function hasVerifiedSupabaseSession(dependencies: {
+  env?: Environment;
+  createClient?: (config: SupabaseServerConfig) => Promise<VerifiedUserClient> | VerifiedUserClient;
+} = {}): Promise<boolean> {
+  const config = loadSupabaseServerConfig(dependencies.env);
+  if (!config) return false;
+
+  try {
+    const client = await (dependencies.createClient ?? createSupabaseServerClient)(config);
+    const { data, error } = await client.auth.getUser();
+    return !error && Boolean(data.user);
+  } catch {
+    return false;
+  }
 }

@@ -1,12 +1,12 @@
 # Operating post-payment cancellation and refunds
 
-These endpoints are a temporary, server-only administrative boundary for Mercado Pago order cancellation and refund. Enable them only after the database migration and Prisma client generation succeed. They are not a replacement for administrator sessions, roles, or RBAC.
+These endpoints use Supabase administrator sessions, active `AdminMembership`, request-integrity/CSRF checks, and audit records for Mercado Pago cancellation and refund. Deploy only after migrations and Prisma client generation succeed. Repository implementation does not establish production verification.
 
 ## Quick path
 
 1. Apply the post-payment migration and regenerate Prisma before deploying the routes.
-2. Store `POST_PAYMENT_ADMIN_TOKEN` and the separate `RECONCILIATION_CRON_SECRET` only in the deployment secret manager and restart every application instance.
-3. Call an administrative endpoint with `POST_PAYMENT_ADMIN_TOKEN`, or the reconciliation scheduler endpoint with `RECONCILIATION_CRON_SECRET`, in an `Authorization: Bearer <token>` header over an approved private/HTTPS path.
+2. Configure Supabase Auth and bootstrap an active administrator membership using [admin-auth.md](admin-auth.md); keep `RECONCILIATION_CRON_SECRET` in the deployment secret manager.
+3. Call administrative endpoints with an authorized session and valid same-origin/CSRF evidence. Only the scheduler uses `Authorization: Bearer <token>` with `RECONCILIATION_CRON_SECRET`.
 4. Use the returned operation status and verified Mercado Pago evidence for reconciliation; never retry by editing stock or order records manually.
 
 ## Deployment prerequisites
@@ -18,7 +18,6 @@ The application needs all server-side payment values below. Do not add any of th
 | `DATABASE_URL` | Ledger, order, reservation, and stock transaction | Server-only secret |
 | `MERCADO_PAGO_ACCESS_TOKEN` | Mercado Pago cancel/refund request | Server-only secret |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | Verified webhook reconciliation | Server-only secret |
-| `POST_PAYMENT_ADMIN_TOKEN` | Temporary administrative route authorization | Server-only secret; use a high-entropy value from the approved secret manager |
 | `RECONCILIATION_CRON_SECRET` | Server-to-server authorization for the bounded reconciliation scheduler | Server-only secret; use a separate high-entropy value from the approved secret manager |
 
 Before the first deployment, stop the local development server if Windows holds Prisma's native DLL, then run:
@@ -32,20 +31,20 @@ In a non-PowerShell environment, use the equivalent `pnpm exec` commands. Do not
 
 ## Enable and use the boundary
 
-Set `POST_PAYMENT_ADMIN_TOKEN` in the server secret manager, deploy it to every instance, and restart the instances so their environment is refreshed. The routes are:
+Deploy the session-authorized routes and membership/audit migration; configure Auth and origin settings using the administrator runbook. The routes are:
 
 ```text
 POST /api/internal/orders/{orderId}/cancel
 POST /api/internal/orders/{orderId}/refund
 ```
 
-The request has no body. Send the token only through the `Authorization` header. Missing credentials return `401`, invalid credentials return `403`, and an unset server token returns `503`. Authentication occurs before database, provider, or stock work.
+The request has no body. Supply the administrator session and request-integrity/CSRF evidence, not the legacy bearer token. Integrity checks run first; missing sessions return `401 ADMIN_SESSION_REQUIRED`, inactive/non-member users return `403 ADMIN_ACCESS_DENIED`, and unavailable authorization returns `503 ADMIN_AUTH_UNAVAILABLE`, before payment/provider/stock work. Audit failures also fail closed.
 
 Cancellation is eligible only before a paid or terminal order. Refund is eligible only for a paid order. A successful operation is recorded durably and reuses its provider idempotency key; a duplicate completed operation returns `409` rather than repeating provider or stock effects.
 
 ## Reconciliation scheduler
 
-`POST /api/internal/payments/reconcile` is a server-to-server scheduler endpoint, not an administrative endpoint. Its `RECONCILIATION_CRON_SECRET` must be different from `POST_PAYMENT_ADMIN_TOKEN`; possessing one secret must not authorize the other boundary. The scheduler may invoke it over the approved private/HTTPS path with no request body:
+`POST /api/internal/payments/reconcile` is a server-to-server scheduler endpoint, not an administrative endpoint. Its `RECONCILIATION_CRON_SECRET` does not authorize human administration; administrator sessions do not authorize the scheduler. The scheduler may invoke it over the approved private/HTTPS path with no request body:
 
 ```powershell
 Invoke-WebRequest -Method Post -Uri "https://app.example.com/api/internal/payments/reconcile" -Headers @{ Authorization = "Bearer $env:RECONCILIATION_CRON_SECRET" }
@@ -66,7 +65,7 @@ Configure the GitHub repository secrets exactly as follows:
 1. Open the repository in GitHub, then go to **Settings** > **Secrets and variables** > **Actions**.
 2. Select **New repository secret** and create `RECONCILIATION_ENDPOINT_URL`. Set its value to the deployed Netlify HTTPS endpoint, for example `https://<site>.netlify.app/api/internal/payments/reconcile`.
 3. Select **New repository secret** again and create `RECONCILIATION_CRON_SECRET`. Set its value to the same high-entropy server-only value injected into the Netlify application as `RECONCILIATION_CRON_SECRET`.
-4. Confirm the Netlify deployment has its own `RECONCILIATION_CRON_SECRET` environment variable. Do not use `POST_PAYMENT_ADMIN_TOKEN` for either secret.
+4. Confirm the Netlify deployment has its own `RECONCILIATION_CRON_SECRET` environment variable. Do not reuse human credentials for either secret.
 5. Trigger **Reconcile payments** through the Actions tab only after the endpoint is deployed and the normal operational approval process permits it.
 
 The workflow fails closed before sending a request if either GitHub secret is
@@ -94,17 +93,17 @@ database dependency:
   Transaction Pooler connection to include `?pgbouncer=true`. Catalog reads
   succeeded after that configuration was updated.
 
-No secret values or endpoint URLs are recorded here. `POST_PAYMENT_ADMIN_TOKEN`
-was not verified during this recovery; treat the temporary cancel/refund
-boundary as unavailable until that separate token is configured and verified.
+No secret values or endpoint URLs are recorded here. This historical recovery
+did not verify the current session-authorized cancel/refund boundary; verify
+that boundary independently after deployment.
 ## Rotate or disable access
 
-The temporary adapter accepts one configured token at a time.
+Human access is revoked through persistent membership; scheduler access uses one configured cron secret at a time.
 
 ### Rotate
 
 1. Generate and store a replacement value through the approved secret manager; do not paste it into source control, tickets, chat, logs, or `.env.example`.
-2. Update `POST_PAYMENT_ADMIN_TOKEN` or `RECONCILIATION_CRON_SECRET` on every application instance or scheduler process that uses the rotating boundary.
+2. Update `RECONCILIATION_CRON_SECRET` on every application instance or scheduler process that uses the rotating boundary.
 3. Restart or redeploy every instance.
 4. Verify an authorized request only through the approved sandbox or operational process.
 5. Revoke the previous value in the secret manager after all instances use the new value.
@@ -113,13 +112,13 @@ Rotation invalidates callers that still use the old value. Plan the caller updat
 
 ### Disable
 
-Remove `POST_PAYMENT_ADMIN_TOKEN` to disable the administrative routes; they return `503 POST_PAYMENT_UNAVAILABLE` before any database, Mercado Pago, or stock work. Remove `RECONCILIATION_CRON_SECRET` to disable the scheduler endpoint; it returns `503 RECONCILIATION_AUTH_UNAVAILABLE` before payment configuration, database leasing, repository creation, or Mercado Pago gateway construction. Restart/redeploy every affected process and preserve the other payment secrets unless the broader payment integration is also being disabled.
+Revoke the operator's active membership to deny their next sensitive request; see the administrator runbook. Removing the legacy token does not disable the current administrative routes. Remove `RECONCILIATION_CRON_SECRET` to disable the scheduler endpoint; it returns `503 RECONCILIATION_AUTH_UNAVAILABLE` before payment configuration, database leasing, repository creation, or Mercado Pago gateway construction. Restart/redeploy every affected process and preserve the other payment secrets unless the broader payment integration is also being disabled.
 
 ## Redaction and safe evidence
 
 Never write or expose these values in responses, browser code, screenshots, issue trackers, test fixtures, CI output, or application logs:
 
-- `POST_PAYMENT_ADMIN_TOKEN`, `RECONCILIATION_CRON_SECRET`, and full `Authorization` headers;
+- session cookies, CSRF tokens, `RECONCILIATION_CRON_SECRET`, and full `Authorization` headers;
 - Mercado Pago access tokens and webhook secrets;
 - raw provider response bodies or request headers;
 - customer data, full order identifiers, and provider identifiers outside the approved operational system.
@@ -130,7 +129,7 @@ For support and reconciliation, record only the operation type, redacted/opaque 
 
 Provider action failures or invalid provider action responses leave the local operation ledger in `RUNNING`. This preserves its idempotency key for a safe retry or for reconciliation with verified signed webhook evidence. Do not create a second operation, invent a completion state, or manually change stock to "make it match."
 
-If an operator must halt new administrative actions, disable the token first. Then reconcile from authoritative evidence in this order:
+If an operator must halt new administrative actions, revoke the applicable administrator membership first. Then reconcile from authoritative evidence in this order:
 
 1. Confirm the Mercado Pago operation through the approved provider channel.
 2. Inspect the durable operation ledger, order state, webhook receipt, reservations, and stock under the normal production access controls.
@@ -143,15 +142,15 @@ Application rollback does not automatically undo the Prisma migration or a provi
 
 ## Operational limits
 
-- This boundary is for approved internal operators only; it has no user sessions, roles, RBAC, audit UI, or multi-token grace period.
-- It is not a public client API and must not be called from browser code.
+- This boundary is for active approved administrators with sessions and audit records; the approved ADMIN/EDITOR permission matrix remains pending release and deployed verification.
+- It is not a public client API; administrative browser calls must satisfy session and same-origin/CSRF checks.
 - Use sandbox credentials and secret-manager injection for end-to-end verification. Do not place live credentials in local files or automated test output.
 - The provider is authoritative. Completion requires a normalized terminal provider result or validated signed webhook evidence.
 - The service supports cancellation and refund only; it does not perform arbitrary payment corrections.
 
 ## Sandbox E2E harness
 
-Task 4.4 has a dedicated executable harness at `scripts/e2e/post-payment-sandbox.mts`. It proves the full protected-operation path without exposing credentials or identifiers in command history or output:
+`scripts/e2e/post-payment-sandbox.mts` uses an existing administrator session and matching CSRF evidence for the protected-operation path. It does not sign in, mint sessions, or bypass membership checks. Runtime sandbox verification remains pending; mocked transport tests are not end-to-end evidence. Its assertions are:
 
 1. It snapshots the fixture's local order, reservations, and variant stock from Prisma.
 2. It invokes exactly one authenticated internal `cancel` or `refund` request.
@@ -172,15 +171,18 @@ For deployment and shared environments, an approved secret manager must inject t
 | `DATABASE_URL` | Reads the local ledger, reservation, webhook-receipt, and stock assertions. |
 | `MERCADO_PAGO_ACCESS_TOKEN` | Lets the application validate the provider action and webhook evidence. |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | Lets the application validate the replayed signed webhook. |
-| `POST_PAYMENT_ADMIN_TOKEN` | Authorizes the one protected cancel/refund call; never printed. |
+| `E2E_POST_PAYMENT_ADMIN_COOKIE` | Exact Cookie request header from a current sandbox Magic Link session after visiting `/admin`: all `sb-*-auth-token` cookie chunks and `admin_csrf_token` only. Secret; never printed. |
+| `E2E_POST_PAYMENT_CSRF_TOKEN` | Exact value of that same `admin_csrf_token` cookie. Secret; must match. |
 | `E2E_POST_PAYMENT_ENVIRONMENT=sandbox` | Hard safety assertion; live/prod execution is refused. |
 | `E2E_POST_PAYMENT_SECRET_SOURCE=secret-manager` | Declares an approved secret-manager injection path. |
 | `E2E_POST_PAYMENT_CONFIRM=SANDBOX_ONLY` | Requires an explicit operator confirmation. |
-| `E2E_POST_PAYMENT_BASE_URL` | Localhost or HTTPS sandbox application URL. |
+| `E2E_POST_PAYMENT_BASE_URL` | Exact localhost or HTTPS sandbox application origin; no credentials, path, query, or fragment. Must match deployed `APP_ORIGIN`/`DEPLOY_PRIME_URL`. |
 | `E2E_POST_PAYMENT_ORDER_ID` | Fresh prepared local sandbox order ID; never printed. |
 | `E2E_POST_PAYMENT_WEBHOOK_BODY_BASE64` | Base64 of the exact provider notification body; never printed. |
 | `E2E_POST_PAYMENT_WEBHOOK_SIGNATURE` | Exact `x-signature` header; never printed. |
 | `E2E_POST_PAYMENT_WEBHOOK_REQUEST_ID` | Optional original `x-request-id` header. |
+
+After approved sandbox Magic Link sign-in and a visit to `/admin`, retain the current Cookie header and matching CSRF value through the approved injection mechanism. Do not copy them into chat, files, command arguments, or logs. Missing, expired, revoked, or unauthorized sessions cannot be replaced with the legacy token; sign in again through the normal flow. The harness supplies Origin and same-origin fetch metadata, rejects redirects rather than forwarding credentials, and does not refresh cookies between requests.
 
 Start the application through the same approved secret-manager injection mechanism, then run the harness through that mechanism as well. Substitute the approved command for `<secret-manager-inject>`; it must populate process environment rather than copy values into a file:
 
@@ -205,16 +207,19 @@ E2E_POST_PAYMENT_CONFIRM=SANDBOX_ONLY
 
 Use `cancel` instead of `refund` only with a freshly prepared cancel-eligible fixture. The harness reports only an opaque order reference, operation name, and assertion names. It makes no provider request until `--execute` is present, and it fails closed for production mode, a non-sandbox marker, invalid secret source, missing confirmation, missing input, invalid fixture state, invalid protected-route response, or any double-restock signal.
 
-## Planned authentication replacement
+## Current authentication boundary
 
-`src/lib/admin/temporary-admin-auth.ts` deliberately isolates the provisional Bearer-token check. The future `supabase-admin-auth` change must replace this adapter and its route integration with Supabase Auth sessions, administrator roles/RBAC, revocation, and auditable identity. It must not couple identity rules into the post-payment service, gateway, or stock transaction.
+Cancel/refund routes use `requireAdmin` and `requireAdminRequestIntegrity`.
+Identity comes from Supabase; persistent membership and audit are application
+database responsibilities. Keep these rules out of the payment service, gateway,
+and stock transaction. The approved ADMIN/EDITOR permission matrix remains pending release and deployed verification.
 
 ## Deployment checklist
 
 - [ ] Migration `20260815000000_post_payment_operations` is applied.
 - [ ] Prisma client is regenerated for the deployed schema.
 - [ ] All server-side secrets are present only in the approved secret manager.
-- [ ] `POST_PAYMENT_ADMIN_TOKEN` is configured or deliberately absent to keep the boundary disabled.
-- [ ] `RECONCILIATION_CRON_SECRET` is configured only for the reconciliation scheduler and differs from `POST_PAYMENT_ADMIN_TOKEN`.
+- [ ] Administrator session, active membership, origin/CSRF, and audit behavior are verified on the deployed candidate.
+- [ ] `RECONCILIATION_CRON_SECRET` is configured only for the reconciliation scheduler and does not authorize human administrative actions.
 - [ ] No secret or raw provider payload is present in logs, tickets, tests, or deployment output.
 - [ ] Sandbox verification and reconciliation evidence are retained with redacted identifiers.

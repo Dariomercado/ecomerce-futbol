@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import type { PrismaClient } from "@prisma/client";
 
@@ -8,7 +9,8 @@ type HarnessConfig = {
   baseUrl: string;
   operation: Operation;
   orderId: string;
-  adminToken: string;
+  adminCookie: string;
+  csrfToken: string;
   webhook: {
     body: string;
     dataId: string;
@@ -96,7 +98,7 @@ function readOperation(args: string[]): Operation {
   throw new HarnessFailure("E2E_OPERATION_REQUIRED");
 }
 
-function assertSandboxExecutionIntent(args: string[]) {
+export function assertSandboxExecutionIntent(args: string[]) {
   if (!args.includes("--execute")) throw new HarnessFailure("E2E_EXECUTION_NOT_CONFIRMED");
   if (process.env.NODE_ENV === "production") throw new HarnessFailure("E2E_PRODUCTION_MODE_FORBIDDEN");
   if (process.env.E2E_POST_PAYMENT_ENVIRONMENT !== "sandbox") throw new HarnessFailure("E2E_SANDBOX_ENVIRONMENT_REQUIRED");
@@ -107,25 +109,34 @@ function assertSandboxExecutionIntent(args: string[]) {
   }
 }
 
-function readConfig(operation: Operation): HarnessConfig {
+export function readConfig(operation: Operation): HarnessConfig {
   // The app itself consumes these values; validate their presence here so an
   // incomplete injection never becomes a misleading E2E result.
   required("DATABASE_URL");
   required("MERCADO_PAGO_ACCESS_TOKEN");
   required("MERCADO_PAGO_WEBHOOK_SECRET");
   const baseUrl = required("E2E_POST_PAYMENT_BASE_URL");
-  const url = new URL(baseUrl);
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new HarnessFailure("E2E_BASE_URL_INVALID");
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new HarnessFailure("E2E_BASE_URL_MUST_BE_ORIGIN");
+  }
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) {
     throw new HarnessFailure("E2E_BASE_URL_MUST_BE_HTTPS_OR_LOCALHOST");
   }
 
+  const session = readAdminSession();
   const body = decodeWebhookBody(required("E2E_POST_PAYMENT_WEBHOOK_BODY_BASE64"));
   const notification = parseWebhookNotification(body);
   return {
     baseUrl: url.toString().replace(/\/$/, ""),
     operation,
     orderId: required("E2E_POST_PAYMENT_ORDER_ID"),
-    adminToken: required("POST_PAYMENT_ADMIN_TOKEN"),
+    ...session,
     webhook: {
       body,
       ...notification,
@@ -133,6 +144,27 @@ function readConfig(operation: Operation): HarnessConfig {
       ...(process.env.E2E_POST_PAYMENT_WEBHOOK_REQUEST_ID ? { requestId: process.env.E2E_POST_PAYMENT_WEBHOOK_REQUEST_ID } : {}),
     },
   };
+}
+
+function readAdminSession() {
+  const adminCookie = required("E2E_POST_PAYMENT_ADMIN_COOKIE");
+  const csrfToken = required("E2E_POST_PAYMENT_CSRF_TOKEN");
+  // Accept a Cookie request header, never Set-Cookie attributes or control bytes.
+  const pairs = adminCookie.split(";").map((part) => part.trim().split("="));
+  if (/[^\x20-\x7e]/.test(adminCookie) || pairs.some(([name, value, ...extra]) => !name || !value || extra.length || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || !/^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/.test(value))) {
+    throw new HarnessFailure("E2E_ADMIN_COOKIE_INVALID");
+  }
+  const names = pairs.map(([name]) => name);
+  if (new Set(names).size !== names.length || names.some((name) => !/^sb-.+-auth-token(?:\.\d+)?$/.test(name) && name !== "admin_csrf_token")) {
+    throw new HarnessFailure("E2E_ADMIN_COOKIE_INVALID");
+  }
+  if (!names.some((name) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name))) {
+    throw new HarnessFailure("E2E_ADMIN_SESSION_COOKIE_REQUIRED");
+  }
+  if (pairs.find(([name]) => name === "admin_csrf_token")?.[1] !== csrfToken) {
+    throw new HarnessFailure("E2E_ADMIN_CSRF_MISMATCH");
+  }
+  return { adminCookie, csrfToken };
 }
 
 function required(name: string) {
@@ -201,10 +233,16 @@ function assertEligibleFixture(snapshot: StockSnapshot, operation: Operation) {
   if (snapshot.operationStatus === "COMPLETED") throw new HarnessFailure("E2E_FIXTURE_OPERATION_ALREADY_COMPLETED");
 }
 
-async function invokeOperation(config: HarnessConfig) {
+export async function invokeOperation(config: HarnessConfig) {
   return fetch(`${config.baseUrl}/api/internal/orders/${encodeURIComponent(config.orderId)}/${config.operation}`, {
     method: "POST",
-    headers: { authorization: `Bearer ${config.adminToken}` },
+    redirect: "error",
+    headers: {
+      cookie: config.adminCookie,
+      origin: new URL(config.baseUrl).origin,
+      "sec-fetch-site": "same-origin",
+      "x-csrf-token": config.csrfToken,
+    },
   });
 }
 
@@ -255,7 +293,7 @@ function opaque(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
-void main().catch((error: unknown) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void main().catch((error: unknown) => {
   const code = error instanceof HarnessFailure ? error.code : "E2E_HARNESS_UNEXPECTED_FAILURE";
   console.error(JSON.stringify({ result: "failed", code }));
   process.exitCode = 1;

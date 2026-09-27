@@ -40,7 +40,7 @@ type RequireAdminDependencies = {
  * the next sensitive request. User metadata and JWT role claims never decide
  * access here.
  */
-export async function requireAdmin(dependencies: RequireAdminDependencies = {}): Promise<AdminAuthorizationResult> {
+export async function requireAdmin(dependencies: RequireAdminDependencies = {}, permission: "catalog" | "orders" | "staff" = "catalog"): Promise<AdminAuthorizationResult> {
   const env = dependencies.env ?? process.env;
   const config = loadSupabaseServerConfig(env);
 
@@ -65,7 +65,7 @@ export async function requireAdmin(dependencies: RequireAdminDependencies = {}):
 
     const membership = await (dependencies.membershipRepository ?? createPrismaAdminMembershipRepository())
       .findActiveBySupabaseUserId(data.user.id);
-    if (!membership) {
+    if (!membership || !["ADMIN", "EDITOR"].includes(membership.role) || (permission !== "catalog" && membership.role !== "ADMIN")) {
       return { authorized: false, status: 403, code: "ADMIN_ACCESS_DENIED" };
     }
 

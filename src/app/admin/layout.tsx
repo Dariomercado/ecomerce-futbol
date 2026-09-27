@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin-authorization";
 
 type AdminLayoutProps = Readonly<{ children: React.ReactNode }>;
@@ -29,7 +30,12 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10" data-state="authorized" data-testid="admin-shell">
       <header className="mb-8 flex items-center justify-between border-b pb-4">
-        <p className="font-semibold">Operator administration</p>
+        <div><p className="font-semibold">Operator administration - {authorization.membership.role}</p>
+          <nav aria-label="Administration" className="mt-2 flex gap-4 text-sm">
+            <Link href="/admin">Catalog</Link>
+            {authorization.membership.role === "ADMIN" && <><Link href="/admin/orders">Orders</Link><Link href="/admin/staff">Staff access</Link></>}
+          </nav>
+        </div>
         <form action="/auth/sign-out" method="post">
           <button className="rounded-md border px-3 py-2 text-sm font-medium" type="submit">Sign out</button>
         </form>

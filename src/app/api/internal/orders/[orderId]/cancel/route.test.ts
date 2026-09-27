@@ -177,3 +177,13 @@ describe("POST /api/internal/orders/[orderId]/cancel", () => {
     expect(executePostPaymentOperation).toHaveBeenCalledOnce();
   });
 });
+
+
+it("requests orders permission before any financial operation", async () => {
+  requireAdminRequestIntegrity.mockReturnValue({ valid: true });
+  requireAdmin.mockResolvedValue({ authorized: false, status: 403, code: "ADMIN_ACCESS_DENIED" });
+  const { POST } = await import("./route");
+  const response = await POST(new Request("https://shop.example.com/api/internal/orders/order-1/operation", { method: "POST" }), { params });
+  expect(response.status).toBe(403);
+  expect(requireAdmin).toHaveBeenCalledWith({}, "orders");
+});

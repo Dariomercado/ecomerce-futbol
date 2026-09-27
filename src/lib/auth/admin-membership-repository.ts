@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 
 export type AdminMembership = {
+  role: "ADMIN" | "EDITOR";
   id: string;
   supabaseUserId: string;
 };
@@ -14,7 +15,7 @@ export type AdminMembershipRepository = {
 type AdminMembershipModel = {
   findFirst(args: {
     where: { supabaseUserId: string; isActive: true; revokedAt: null };
-    select: { id: true; supabaseUserId: true };
+    select: { id: true; supabaseUserId: true; role: true };
   }): Promise<AdminMembership | null>;
 };
 
@@ -34,7 +35,7 @@ export function createPrismaAdminMembershipRepository(
     findActiveBySupabaseUserId(supabaseUserId) {
       return client.adminMembership.findFirst({
         where: { supabaseUserId, isActive: true, revokedAt: null },
-        select: { id: true, supabaseUserId: true },
+        select: { id: true, supabaseUserId: true, role: true },
       });
     },
   };

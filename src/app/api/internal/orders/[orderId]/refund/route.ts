@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ code: integrity.code }, { status: integrity.status });
   }
 
-  const authorization = await requireAdmin();
+  const authorization = await requireAdmin({}, "orders");
   if (!authorization.authorized) {
     return NextResponse.json({ code: authorization.code }, { status: authorization.status });
   }

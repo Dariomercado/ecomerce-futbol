@@ -6,7 +6,7 @@ import type { AdminMembershipRepository } from "./admin-membership-repository";
 
 const activeUserId = "11111111-1111-4111-8111-111111111111";
 const revokedUserId = "22222222-2222-4222-8222-222222222222";
-const membership = { id: "33333333-3333-4333-8333-333333333333", supabaseUserId: activeUserId };
+const membership = { id: "33333333-3333-4333-8333-333333333333", supabaseUserId: activeUserId, role: "ADMIN" as const };
 const configuredEnvironment = {
   NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key",
@@ -133,5 +133,21 @@ describe("requireAdmin", () => {
       status: 503,
       code: "ADMIN_AUTH_UNAVAILABLE",
     });
+  });
+});
+
+
+describe("role permissions", () => {
+  it.each(["ADMIN", "EDITOR"] as const)("allows %s to manage catalog", async (role) => {
+    const result = await requireAdmin({ env: configuredEnvironment, createClient: () => authClient({ id: activeUserId }), membershipRepository: membershipRepository(async () => ({ ...membership, role })) }, "catalog");
+    expect(result.authorized).toBe(true);
+  });
+  it.each(["orders", "staff"] as const)("denies EDITOR %s access", async (permission) => {
+    const result = await requireAdmin({ env: configuredEnvironment, createClient: () => authClient({ id: activeUserId }), membershipRepository: membershipRepository(async () => ({ ...membership, role: "EDITOR" })) }, permission);
+    expect(result).toEqual({ authorized: false, status: 403, code: "ADMIN_ACCESS_DENIED" });
+  });
+  it("fails closed for an unknown persisted role", async () => {
+    const result = await requireAdmin({ env: configuredEnvironment, createClient: () => authClient({ id: activeUserId }), membershipRepository: membershipRepository(vi.fn().mockResolvedValue({ ...membership, role: "OWNER" })) });
+    expect(result.authorized).toBe(false);
   });
 });

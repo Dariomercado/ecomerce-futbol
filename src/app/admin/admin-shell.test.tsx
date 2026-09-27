@@ -47,3 +47,14 @@ describe("/admin shell authorization states", () => {
     expect(screen.getByTestId("protected-content")).toBeInTheDocument();
   });
 });
+
+
+it.each(["ADMIN", "EDITOR"])("shows only permitted navigation for %s", async (role) => {
+  requireAdmin.mockResolvedValue({ authorized: true, membership: { id: "member", role }, user: { id: "user" } });
+  const { default: AdminLayout } = await import("@/app/admin/layout");
+  render(await AdminLayout({ children: <p>Catalog</p> }));
+  expect(screen.getByRole("link", { name: "Catalog" })).toBeInTheDocument();
+  expect(Boolean(screen.queryByRole("link", { name: "Staff access" }))).toBe(role === "ADMIN");
+  expect(Boolean(screen.queryByRole("link", { name: "Orders" }))).toBe(role === "ADMIN");
+  cleanup();
+});

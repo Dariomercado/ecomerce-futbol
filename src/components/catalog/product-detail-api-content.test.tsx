@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 import { CartProvider, useCart } from "@/lib/cart/cart-provider";
 import type { ProductDetail } from "@/lib/catalog/public-contracts";
@@ -45,6 +48,16 @@ describe("ProductDetailApiContent", () => {
     render(<CartProvider><ProductDetailApiContent product={product} /><CartProbe /></CartProvider>);
     fireEvent.click(screen.getByRole("button", { name: /Talle 40 40 Disponible/ }));
     fireEvent.click(screen.getByRole("button", { name: "Agregar al carrito" }));
+    expect(screen.getByTestId("cart")).toHaveTextContent("1:110");
+  });
+
+  it("starts direct checkout with the selected variant without changing the cart", () => {
+    render(<CartProvider><ProductDetailApiContent product={product} /><CartProbe /></CartProvider>);
+    fireEvent.click(screen.getByRole("button", { name: /Talle 40 40 Disponible/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar al carrito" }));
+    fireEvent.click(screen.getByRole("button", { name: "Comprar ahora" }));
+
+    expect(push).toHaveBeenCalledWith("/checkout?buyNowProductId=p1&buyNowPrice=110&buyNowVariantId=v1");
     expect(screen.getByTestId("cart")).toHaveTextContent("1:110");
   });
 });

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { MercadoPagoCardForm, type ThreeDSChallenge } from "@/components/checkout/mercado-pago-card-form";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,22 @@ type PaymentConfig = { enabled: boolean; publicKey?: string };
 type CheckoutError = { message: string };
 type PaymentIntent = { id: string; token: string };
 
-export default function CheckoutPage() {
+function CheckoutPageContent() {
   const { items, total, clearCart } = useCart();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const directProductId = searchParams.get("buyNowProductId");
+  const directVariantId = searchParams.get("buyNowVariantId");
+  const directPriceParameter = searchParams.get("buyNowPrice");
+  const directPriceValue = directPriceParameter === null || directPriceParameter.trim() === "" ? Number.NaN : Number(directPriceParameter);
+  const directCheckout = directProductId ? {
+    productId: directProductId,
+    variantId: directVariantId || null,
+    price: Number.isFinite(directPriceValue) && directPriceValue >= 0 ? directPriceValue : null,
+  } : null;
+  const checkoutLines = directCheckout
+    ? [{ productId: directCheckout.productId, variantId: directCheckout.variantId, quantity: 1 }]
+    : items.map((item) => ({ productId: item.id, variantId: item.variant?.id ?? null, quantity: item.quantity }));
   const [message, setMessage] = useState<string | null>(null);
   const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
@@ -33,7 +46,7 @@ export default function CheckoutPage() {
       if (status === "PAID" || status === "PAYMENT_FAILED") setPollingEnabled(false);
       else if (status === "PAYMENT_PENDING") setPollingEnabled(true);
       if (status === "PAID") {
-        clearCart();
+        if (!directCheckout) clearCart();
         router.replace(`/checkout/success?orderId=${encodeURIComponent(createdOrder.order.id)}&total=${createdOrder.order.total}`);
       }
       else if (status === "PAYMENT_FAILED") setMessage("El pago fue rechazado. Podés intentar con otra tarjeta.");
@@ -58,7 +71,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           contact: { fullName: formData.get("fullName"), email: formData.get("email"), phone: formData.get("phone") },
           shippingAddress: { addressLine1: formData.get("addressLine1"), addressLine2: formData.get("addressLine2") || undefined, city: formData.get("city"), province: formData.get("province"), postalCode: formData.get("postalCode") },
-          lines: items.map((item) => ({ productId: item.id, variantId: item.variant?.id ?? null, quantity: item.quantity })),
+          lines: checkoutLines,
         }),
       });
       const body = await response.json() as CreatedOrder | CheckoutError;
@@ -111,7 +124,7 @@ export default function CheckoutPage() {
 
       if (result.kind === "paid") {
         setPollingEnabled(false);
-        clearCart();
+        if (!directCheckout) clearCart();
         router.replace(`/checkout/success?orderId=${encodeURIComponent(createdOrder.order.id)}&total=${createdOrder.order.total}`);
       } else if (result.kind === "pending") { setPollingEnabled(true); setMessage("El pago está pendiente. Verificaremos automáticamente su estado."); void refreshOrderStatus(); } else setMessage("Recibimos la respuesta del pago. Confirmaremos su estado con Mercado Pago.");
     } catch {
@@ -119,6 +132,15 @@ export default function CheckoutPage() {
     }
   }
 
-  if (items.length === 0) return <main className="mx-auto w-full max-w-3xl px-4 py-10"><h1 className="font-heading text-4xl font-bold">Checkout</h1><p className="mt-4 text-muted-foreground">Tu carrito está vacío.</p><Button asChild className="mt-6"><Link href="/catalogo">Ver catálogo</Link></Button></main>;
-  return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"><p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">Compra como invitado</p><h1 className="mt-2 font-heading text-4xl font-bold">Checkout</h1><p className="mt-3 text-muted-foreground">No necesitás una cuenta para completar tus datos de entrega.</p><form className="mt-8 grid gap-4 rounded-3xl border border-border bg-card p-6" onSubmit={submitOrder}><label>Nombre completo<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="fullName" required /></label><label>Email<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="email" required type="email" /></label><label>Teléfono<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="phone" required /></label><label>Dirección<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine1" required /></label><label>Departamento, piso o referencia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine2" /></label><div className="grid gap-4 sm:grid-cols-3"><label>Ciudad<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="city" required /></label><label>Provincia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="province" required /></label><label>Código postal<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="postalCode" required /></label></div><div className="flex items-center justify-between border-t border-border pt-4"><span className="font-semibold">Total a verificar</span><span className="font-semibold">${total.toLocaleString("es-AR")}</span></div><p className="text-sm text-muted-foreground">El total final se calcula nuevamente con el catálogo en el servidor.</p><Button type="submit" disabled={isSubmittingOrder || Boolean(createdOrder)}>{createdOrder ? "Pedido registrado" : isSubmittingOrder ? "Registrando pedido…" : "Continuar con el pedido"}</Button>{message ? <p aria-live="polite" className="text-sm">{message}</p> : null}</form>{createdOrder && paymentConfig?.publicKey ? <section className="mt-6 rounded-3xl border border-border bg-card p-6"><h2 className="font-heading text-2xl font-bold">Pago con tarjeta</h2><p className="mt-2 text-sm text-muted-foreground">Los datos de tu tarjeta se completan de forma segura con Mercado Pago.</p><MercadoPagoCardForm amount={createdOrder.order.total} onThreeDSClose={(reason) => { setThreeDSChallenge(null); if (reason === "expired") setMessage("La autenticación 3DS venció. Intentá nuevamente."); if (reason === "closed") setMessage("La autenticación 3DS fue cancelada. Podés intentar nuevamente."); }} onThreeDSComplete={() => setMessage("La autenticación 3DS fue recibida. Confirmaremos el estado con Mercado Pago.")} onTokenizationError={setMessage} onTokenized={submitTokenizedPayment} publicKey={paymentConfig.publicKey} threeDSChallenge={threeDSChallenge} />{createdOrder ? <Button type="button" variant="outline" onClick={() => void refreshOrderStatus()}>Verificar estado del pago</Button> : null}</section> : null}</main>;
+  if (items.length === 0 && !directCheckout) return <main className="mx-auto w-full max-w-3xl px-4 py-10"><h1 className="font-heading text-4xl font-bold">Checkout</h1><p className="mt-4 text-muted-foreground">Tu carrito está vacío.</p><Button asChild className="mt-6"><Link href="/catalogo">Ver catálogo</Link></Button></main>;
+  const checkoutTotal = directCheckout ? directCheckout.price : total;
+  return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"><p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">Compra como invitado</p><h1 className="mt-2 font-heading text-4xl font-bold">Checkout</h1>{directCheckout ? <p className="mt-3 text-sm text-muted-foreground">Compra directa · un producto seleccionado</p> : null}<p className="mt-3 text-muted-foreground">No necesitás una cuenta para completar tus datos de entrega.</p><form className="mt-8 grid gap-4 rounded-3xl border border-border bg-card p-6" onSubmit={submitOrder}><label>Nombre completo<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="fullName" required /></label><label>Email<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="email" required type="email" /></label><label>Teléfono<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="phone" required /></label><label>Dirección<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine1" required /></label><label>Departamento, piso o referencia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine2" /></label><div className="grid gap-4 sm:grid-cols-3"><label>Ciudad<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="city" required /></label><label>Provincia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="province" required /></label><label>Código postal<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="postalCode" required /></label></div><div className="flex items-center justify-between border-t border-border pt-4"><span className="font-semibold">{directCheckout ? "Estimación" : "Total a verificar"}</span>{checkoutTotal === null ? <span className="font-semibold">Se calculará en el servidor.</span> : <span className="font-semibold">${checkoutTotal.toLocaleString("es-AR")}</span>}</div><p className="text-sm text-muted-foreground">El total final se calcula nuevamente con el catálogo en el servidor.</p><Button type="submit" disabled={isSubmittingOrder || Boolean(createdOrder)}>{createdOrder ? "Pedido registrado" : isSubmittingOrder ? "Registrando pedido…" : "Continuar con el pedido"}</Button>{message ? <p aria-live="polite" className="text-sm">{message}</p> : null}</form>{createdOrder && paymentConfig?.publicKey ? <section className="mt-6 rounded-3xl border border-border bg-card p-6"><h2 className="font-heading text-2xl font-bold">Pago con tarjeta</h2><p className="mt-2 text-sm text-muted-foreground">Los datos de tu tarjeta se completan de forma segura con Mercado Pago.</p><MercadoPagoCardForm amount={createdOrder.order.total} onThreeDSClose={(reason) => { setThreeDSChallenge(null); if (reason === "expired") setMessage("La autenticación 3DS venció. Intentá nuevamente."); if (reason === "closed") setMessage("La autenticación 3DS fue cancelada. Podés intentar nuevamente."); }} onThreeDSComplete={() => setMessage("La autenticación 3DS fue recibida. Confirmaremos el estado con Mercado Pago.")} onTokenizationError={setMessage} onTokenized={submitTokenizedPayment} publicKey={paymentConfig.publicKey} threeDSChallenge={threeDSChallenge} /><Button type="button" variant="outline" onClick={() => void refreshOrderStatus()}>Verificar estado del pago</Button></section> : null}</main>;
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<p className="mx-auto w-full max-w-3xl px-4 py-10 text-muted-foreground">Cargando checkout…</p>}>
+      <CheckoutPageContent />
+    </Suspense>
+  );
 }

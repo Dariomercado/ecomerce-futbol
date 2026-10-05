@@ -5,7 +5,7 @@ import { reconcileProviderOrder, submitPayment } from "./service";
 import { loadPaymentConfig } from "./config";
 import { MercadoPagoProviderError } from "./mercado-pago-orders-gateway";
 
-const config = loadPaymentConfig({ PAYMENTS_ENABLED: "true", MERCADO_PAGO_ACCESS_TOKEN: "secret", PAYMENT_METHOD_IDS: "visa" });
+const config = loadPaymentConfig({ PAYMENTS_ENABLED: "true", MERCADO_PAGO_ACCESS_TOKEN: "secret", NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY: "TEST-public-key", PAYMENT_METHOD_IDS: "visa" });
 const card = { cardToken: "card-token", paymentMethodId: "visa", paymentType: "credit_card" as const, installments: 1 };
 const input = { orderId: "11111111-1111-4111-8111-111111111111", intentId: "22222222-2222-4222-8222-222222222222", intentToken: "intent", card, total: 18000, currency: "ARS" as const, payerEmail: "buyer@example.com" };
 

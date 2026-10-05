@@ -7,10 +7,15 @@ import { hashStatusCapability } from "@/lib/checkout/contracts";
 import { reserveOrder } from "@/lib/checkout/order-repository";
 import { createGuestOrder } from "@/lib/checkout/guest-order-service";
 import type { GuestOrderInput } from "@/lib/checkout/contracts";
+import { loadPaymentConfig } from "@/lib/payments/config";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!loadPaymentConfig().enabled) {
+    return NextResponse.json({ code: "PAYMENTS_UNAVAILABLE", message: "Checkout is unavailable because payment configuration is incomplete." }, { status: 503 });
+  }
+
   let input: GuestOrderInput;
   try {
     input = await request.json() as GuestOrderInput;

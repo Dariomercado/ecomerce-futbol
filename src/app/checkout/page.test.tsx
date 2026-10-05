@@ -76,13 +76,14 @@ describe("CheckoutPage direct purchase intent", () => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
       requests.push({ url, body });
-      if (url === "/api/checkout/orders") return Response.json({ order: { id: "order-1", total: 110 }, statusCapability: "capability-1" });
       if (url === "/api/checkout/config") return Response.json({ enabled: true, publicKey: "TEST-public-key" });
+      if (url === "/api/checkout/orders") return Response.json({ order: { id: "order-1", total: 110 }, statusCapability: "capability-1" });
       if (url.endsWith("/payment")) return Response.json({ kind: "paid" });
       throw new Error(`Unexpected request: ${url}`);
     }));
 
     renderCheckout();
+    await screen.findByText(/Checkout de demostraci/);
     fireEvent.click(screen.getByRole("button", { name: "Seed existing cart" }));
     fillContactForm();
     fireEvent.click(screen.getByRole("button", { name: "Continuar con el pedido" }));
@@ -102,14 +103,15 @@ describe("CheckoutPage direct purchase intent", () => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
       requests.push({ url, body });
+      if (url === "/api/checkout/config") return Response.json({ enabled: true, publicKey: "TEST-public-key" });
       if (url === "/api/checkout/orders") return Response.json({ order: { id: "order-2", total: 500 }, statusCapability: "capability-2" });
-      if (url === "/api/checkout/config") return Response.json({ enabled: false });
       throw new Error(`Unexpected request: ${url}`);
     }));
     navigation.query = "";
 
     renderCheckout();
     fireEvent.click(screen.getByRole("button", { name: "Seed existing cart" }));
+    await screen.findByText(/Checkout de demostraci/);
     fillContactForm();
     fireEvent.click(screen.getByRole("button", { name: "Continuar con el pedido" }));
 
@@ -117,6 +119,65 @@ describe("CheckoutPage direct purchase intent", () => {
     expect(requests.find((request) => request.url === "/api/checkout/orders")?.body?.lines).toEqual([
       { productId: "unrelated", variantId: null, quantity: 1 },
     ]);
+  });
+
+  it("shows demo-only payment terms and checks availability before creating an order", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/checkout/config") return Response.json({ enabled: true, publicKey: "TEST-public-key" });
+      if (url === "/api/checkout/orders") return Response.json({ order: { id: "order-demo", total: 110 }, statusCapability: "capability" });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderCheckout();
+    expect(await screen.findByText(/tarjetas de prueba/i)).toHaveTextContent(/nunca ingreses los datos de una tarjeta real/i);
+    fillContactForm();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar con el pedido" }));
+
+    await screen.findByText(/Pedido order-demo registrado/);
+    expect(screen.getAllByText(/tarjetas de prueba/i)).toHaveLength(2);
+    expect(screen.getAllByText(/nunca ingreses los datos de una tarjeta real/i)).toHaveLength(2);
+    expect(requests.indexOf("/api/checkout/config")).toBeLessThan(requests.indexOf("/api/checkout/orders"));
+  });
+
+  it("explains disabled payment configuration before any order request", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ enabled: false }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCheckout();
+
+    expect(await screen.findByText(/configuración de pagos está incompleta/i)).toHaveTextContent(/no se reservará ningún pedido/i);
+    fillContactForm();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar con el pedido" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/checkout/config");
+  });
+
+  it("rechecks payment availability at submit time and skips order creation if it changed", async () => {
+    const requests: string[] = [];
+    let configRequestCount = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === "/api/checkout/config") {
+        configRequestCount += 1;
+        return Response.json(configRequestCount === 1 ? { enabled: true, publicKey: "TEST-public-key" } : { enabled: false });
+      }
+      if (url === "/api/checkout/orders") return Response.json({ order: { id: "unexpected-order", total: 110 }, statusCapability: "capability" });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderCheckout();
+    await screen.findByText(/Checkout de demostraci/);
+    fillContactForm();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar con el pedido" }));
+
+    await waitFor(() => expect(requests.filter((url) => url === "/api/checkout/config")).toHaveLength(2));
+    expect(requests).not.toContain("/api/checkout/orders");
+    expect(screen.getByRole("button", { name: "Continuar con el pedido" })).toBeDisabled();
   });
 
   it.each(["buyNowProductId=p1", "buyNowProductId=p1&buyNowPrice=invalid"])(

@@ -66,6 +66,7 @@ describe("checkout API routes", () => {
   });
 
   it("allows guest checkout without a session and returns a hashed one-time capability", async () => {
+    loadPaymentConfig.mockReturnValue({ enabled: true, accessToken: "server-secret", publicKey: "public-key", supportedMethodIds: new Set(["visa"]) });
     createGuestOrder.mockResolvedValue({ order: { id: order.id } });
     reserveOrder.mockResolvedValue(persistedOrder);
     const { POST } = await import("./orders/route");
@@ -87,7 +88,20 @@ describe("checkout API routes", () => {
     expect(reserveOrder).toHaveBeenCalledWith(expect.anything(), { id: order.id }, expect.stringMatching(/^hash:/));
   });
 
+  it("refuses order creation before guest-order processing when payments are disabled", async () => {
+    loadPaymentConfig.mockReturnValue({ enabled: false, supportedMethodIds: new Set() });
+    const { POST } = await import("./orders/route");
+
+    const response = await POST(new Request("http://localhost/api/checkout/orders", { method: "POST", body: JSON.stringify(validInput) }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ code: "PAYMENTS_UNAVAILABLE", message: "Checkout is unavailable because payment configuration is incomplete." });
+    expect(createGuestOrder).not.toHaveBeenCalled();
+    expect(reserveOrder).not.toHaveBeenCalled();
+  });
+
   it("returns a stable safe error when order creation infrastructure fails", async () => {
+    loadPaymentConfig.mockReturnValue({ enabled: true, accessToken: "server-secret", publicKey: "public-key", supportedMethodIds: new Set(["visa"]) });
     createGuestOrder.mockRejectedValue(new Error("database password: secret"));
     const { POST } = await import("./orders/route");
 

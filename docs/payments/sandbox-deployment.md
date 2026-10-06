@@ -1,6 +1,6 @@
 # Deploy Preview Mercado Pago sandbox
 
-Enable sandbox checkout only in an isolated Netlify **Deploy Preview**, using verified Mercado Pago test credentials and isolated test data. Set `PAYMENTS_ENABLED=true` only for that preview; **Production stays `PAYMENTS_ENABLED=false`**. This replaces the earlier Production-hosted sandbox policy. Never substitute real-money credentials or treat a local build as hosted-payment proof.
+Enable sandbox checkout only in an isolated Netlify **Deploy Preview**, using user-confirmed Mercado Pago TEST credentials and the existing fictitious portfolio data. Set `PAYMENTS_ENABLED=true` only for that preview; **Production stays `PAYMENTS_ENABLED=false`**. This replaces the earlier Production-hosted sandbox policy. Never substitute real-money credentials or treat a local build as hosted-payment proof.
 
 ## Configure the hosted demo
 
@@ -13,13 +13,19 @@ Set these site environment variables for the intended Netlify **Deploy Preview**
 | `NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY` | Mercado Pago **test** public key | Public; compiled into the browser bundle, never a secret. |
 | `MERCADO_PAGO_ACCESS_TOKEN` | Mercado Pago **test** access token | Server-only secret. |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | Signing secret for the Mercado Pago test-mode webhook URL | Server-only secret. |
-| `DATABASE_URL` | A dedicated non-production/demo database | Server-only connection string; never reuse the production database for test orders. |
+| `DATABASE_URL` | The existing hosted portfolio database containing only fictitious data | Server-only connection string; this demo does not require a new database. Never use real client data. |
 | `NEXT_PUBLIC_APP_URL` | The intended PR-specific HTTPS Deploy Preview origin | Public build-time value; do not use the Production origin. |
 | `APP_ORIGIN` | The same exact preview HTTPS origin | Server-only exact-origin setting. |
 
 The app also needs its existing Supabase configuration: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; add `SUPABASE_SERVICE_ROLE_KEY` only if catalog images use Supabase Storage. The service-role key is server-only. Scope it to the intended environment. Do not put secrets in `netlify.toml` or the repository; configure them in Netlify's site environment-variable settings.
 
-Obtain the public key and access token from verified test settings for the intended seller application; an `APP_USR` prefix alone does not establish credential mode. Match the preview's test-mode callback, signing secret, and isolated data. Do not enable the scheduler-only `RECONCILIATION_CRON_SECRET` or admin-only `POST_PAYMENT_ADMIN_TOKEN` just to run a buyer checkout demo.
+Obtain the public key and access token from verified test settings for the intended seller application; an `APP_USR` prefix alone does not establish credential mode. Match the preview's test-mode callback, signing secret, and fictitious portfolio data. Do not enable the scheduler-only `RECONCILIATION_CRON_SECRET` or admin-only `POST_PAYMENT_ADMIN_TOKEN` just to run a buyer checkout demo.
+
+## Preview #33 staging status
+
+The owner confirms that all relevant local and existing Netlify Mercado Pago values are TEST and the portfolio has no real clients or real data. Stage only branch `feat/buy-now-sandbox-demo`; preserve Production and other contexts. Keep `PAYMENTS_ENABLED=false` until the preview is rebuilt and the provider TEST callback matches the preview. The provider callback currently still targets ngrok; Netlify staging does not move it. No hosted payment or signed webhook proof is claimed. The corrected public-key create was rejected; authoritative readback still shows the key absent. Branch TEST credentials/database/origin staging and rebuild remain pending; branch and Production checkout stay disabled.
+
+Reuse the existing hosted `DATABASE_URL` by inheritance or a branch-specific override; never upload a localhost connection string. `TEST_DATABASE_URL` is separate and applies only to dedicated PostgreSQL integration tests, not to this hosted portfolio deployment.
 
 ## Configure and retain the preview webhook
 
@@ -33,17 +39,17 @@ Deploy Preview URLs are PR-specific, not permanent production endpoints. Keep th
 2. Verify the configured seller application's test settings and use its test public key and test access token, not a mode inferred from a credential prefix.
 3. Enter a test card from Mercado Pago's current Checkout API test-card guide and use the test buyer details as required there. Card numbers and test-user credentials can vary by country and provider scenario; do not copy real card data or credentials into this repository.
 4. Complete a payment from the intended HTTPS Deploy Preview. Confirm the UI reports the resulting state and that the order becomes terminal only after verified provider evidence.
-5. Confirm the provider delivered a signed notification to the matching preview webhook URL, the endpoint accepted it, and the isolated test order/payment records reflect the authoritative state. A browser redirect alone is not webhook proof.
+5. Confirm the provider delivered a signed notification to the matching preview webhook URL, the endpoint accepted it, and the demo test order/payment records reflect the authoritative state. A browser redirect alone is not webhook proof.
 
 ## Acceptance checklist
 
-- [ ] The isolated Deploy Preview has the exact environment variable names above, verified test credentials, and isolated non-production data.
+- [ ] The isolated Deploy Preview has the exact environment variable names above, verified test credentials, and fictitious portfolio data in the existing database.
 - [ ] `PAYMENTS_ENABLED=true` applies only to the intended isolated preview; Production remains `PAYMENTS_ENABLED=false` and no real-money credentials are used for the demo.
 - [ ] `APP_ORIGIN`, `NEXT_PUBLIC_APP_URL`, and the test-mode webhook URL use the same intended PR-specific HTTPS preview origin.
 - [ ] Public key is present in the newly built site bundle; server-only secrets are configured in Netlify and not in client code or repository files.
 - [ ] Checkout is reachable over HTTPS and clearly identifies the test/demo context.
 - [ ] A provider test buyer/card completes the expected payment flow.
-- [ ] Signed test-mode webhook delivery is observed at the matching preview endpoint and the isolated test order reaches the expected terminal state.
+- [ ] Signed test-mode webhook delivery is observed at the matching preview endpoint and the demo test order reaches the expected terminal state.
 - [ ] The preview callback remains reachable with matching credentials/data for all pending test orders before the preview or callback is retired.
 - [ ] Deployment URL, opaque order reference, observed result, and webhook delivery evidence are recorded without recording credentials or card details.
 

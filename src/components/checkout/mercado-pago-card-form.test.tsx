@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadMercadoPago = vi.fn();
@@ -61,6 +61,25 @@ describe("MercadoPagoCardForm", () => {
     });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it("keeps card credentials empty and links preview testers to official test-card instructions", async () => {
+    const { MercadoPagoCardForm } = await import("./mercado-pago-card-form");
+
+    const { container } = render(<MercadoPagoCardForm publicKey="TEST-public-key" amount={18000} onTokenized={vi.fn()} />);
+    await act(async () => {});
+
+    const form = within(container);
+    expect(form.getByText("Encontrá tarjetas de prueba y escenarios compatibles en la guía oficial de Mercado Pago.")).toBeInTheDocument();
+    expect(form.getByRole("link", { name: "Consultar tarjetas de prueba y escenarios" })).toHaveAttribute(
+      "href",
+      "https://www.mercadopago.com.ar/developers/es/docs/split-payments/additional-content/your-integrations/test/cards",
+    );
+    expect(form.getByLabelText("Número de tarjeta")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Vencimiento")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Código de seguridad")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Titular de la tarjeta")).toHaveValue("");
+    expect(form.getByLabelText("Email del titular")).toHaveValue("");
   });
 
   it("keeps tokenization failures local and never exposes PAN or CVV fields to the component", async () => {

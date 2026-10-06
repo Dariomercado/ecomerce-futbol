@@ -127,35 +127,54 @@ export function MercadoPagoCardForm({ publicKey, amount, onTokenized, onTokeniza
   }, [amount, formId, publicKey]);
 
   return (
-    <form id={formId} className="grid gap-4" noValidate>
-      <CardIframeField id={`${formId}-card-number`} label="Número de tarjeta" />
-      <CardIframeField id={`${formId}-expiration-date`} label="Vencimiento" />
-      <CardIframeField id={`${formId}-security-code`} label="Código de seguridad" />
-      <label className="grid gap-1" htmlFor={`${formId}-cardholder-name`}>
+    <form id={formId} aria-label="Formulario de pago con tarjeta" className="mp-card-form grid gap-5" noValidate>
+      <div className="grid gap-1">
+        <h3 className="font-heading text-lg font-semibold">Datos de la tarjeta</h3>
+        <p className="text-sm text-muted-foreground">Ingresá los datos para continuar con el pago.</p>
+      </div>
+      <aside className="grid gap-2 rounded-xl border border-accent/40 bg-accent/10 p-4 text-sm" aria-label="Aviso sobre tarjetas de prueba">
+        <p className="font-semibold">Checkout de demostración</p>
+        <p>Encontrá tarjetas de prueba y escenarios compatibles en la guía oficial de Mercado Pago.</p>
+        <a className="w-fit font-semibold text-foreground underline underline-offset-4 transition-colors" href="https://www.mercadopago.com.ar/developers/es/docs/split-payments/additional-content/your-integrations/test/cards" rel="noreferrer" target="_blank">
+          Consultar tarjetas de prueba y escenarios <span aria-hidden="true">↗</span>
+        </a>
+      </aside>
+      <div className="grid gap-4">
+        <CardIframeField id={`${formId}-card-number`} label="Número de tarjeta" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CardIframeField id={`${formId}-expiration-date`} label="Vencimiento" />
+          <CardIframeField id={`${formId}-security-code`} label="Código de seguridad" />
+        </div>
+      </div>
+      <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-cardholder-name`}>
         Titular de la tarjeta
-        <input className="rounded-md border border-input bg-background p-2" id={`${formId}-cardholder-name`} />
+        <input className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-cardholder-name`} />
       </label>
-      <label className="grid gap-1" htmlFor={`${formId}-issuer`}>
-        Banco emisor
-        <select className="rounded-md border border-input bg-background p-2" id={`${formId}-issuer`} />
-      </label>
-      <label className="grid gap-1" htmlFor={`${formId}-installments`}>
-        Cuotas
-        <select className="rounded-md border border-input bg-background p-2" id={`${formId}-installments`} />
-      </label>
-      <label className="grid gap-1" htmlFor={`${formId}-identification-type`}>
-        Tipo de documento
-        <select className="rounded-md border border-input bg-background p-2" id={`${formId}-identification-type`} />
-      </label>
-      <label className="grid gap-1" htmlFor={`${formId}-identification-number`}>
-        Número de documento
-        <input className="rounded-md border border-input bg-background p-2" id={`${formId}-identification-number`} />
-      </label>
-      <label className="grid gap-1" htmlFor={`${formId}-cardholder-email`}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-identification-type`}>
+          Tipo de documento
+          <select className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-identification-type`} />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-identification-number`}>
+          Número de documento
+          <input className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-identification-number`} />
+        </label>
+      </div>
+      <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-cardholder-email`}>
         Email del titular
-        <input className="rounded-md border border-input bg-background p-2" id={`${formId}-cardholder-email`} type="email" />
+        <input className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-cardholder-email`} type="email" />
       </label>
-      <button className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground" type="submit">Tokenizar tarjeta</button>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-issuer`}>
+          Banco emisor
+          <select className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-issuer`} />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${formId}-installments`}>
+          Cuotas
+          <select className="mp-card-form__control rounded-lg border border-input bg-background px-3 py-2.5 text-base font-normal text-foreground" id={`${formId}-installments`} />
+        </label>
+      </div>
+      <button className="rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" type="submit">Continuar al pago</button>
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       {threeDSChallenge ? <ThreeDSChallengeFrame challenge={threeDSChallenge} onComplete={onThreeDSComplete} onClose={onThreeDSClose} /> : null}
     </form>
@@ -209,7 +228,7 @@ function ThreeDSChallengeFrame({ challenge, onComplete, onClose }: { challenge: 
 }
 
 function CardIframeField({ id, label }: { id: string; label: string }) {
-  return <div className="grid gap-1"><span>{label}</span><div aria-label={label} className="min-h-10 rounded-md border border-input bg-background p-2" id={id} /></div>;
+  return <div className="grid gap-1.5 text-sm font-medium"><span>{label}</span><div aria-label={label} className="min-h-11 rounded-lg border border-input bg-background p-3" id={id} /></div>;
 }
 
 function tokenFrom(data: CardFormData | undefined): CardToken | undefined {

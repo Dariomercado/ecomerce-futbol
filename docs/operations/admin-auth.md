@@ -70,8 +70,9 @@ Conversely, an administrator's browser session must not be supplied to the sched
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public project URL; browser-safe, but use the intended environment only. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public publishable key; browser-safe. It does not grant administrator access. |
-| `APP_ORIGIN` | Server-only exact application origin override. Set `http://localhost:3000` locally and the exact Netlify Production origin in Production; no path, wildcard, query, fragment, or credentials. |
-| `DEPLOY_PRIME_URL` | Trusted Netlify system variable used only when `APP_ORIGIN` is absent. Deploy Previews must omit `APP_ORIGIN`; the application accepts only an exact HTTP(S) origin from this variable. |
+| `APP_ORIGIN` | Server-only exact application origin override outside Deploy Preview. Set `http://localhost:3000` locally and the exact Netlify Production origin in Production; no path, wildcard, query, fragment, or credentials. Ignored when `CONTEXT=deploy-preview`. |
+| `CONTEXT` | Netlify deployment context. The application selects Preview-only origin handling only for the exact value `deploy-preview`; verify that this system variable reaches the deployed application. |
+| `DEPLOY_PRIME_URL` | Trusted Netlify current deploy URL. Required as an exact HTTP(S) origin for Deploy Preview, even if `APP_ORIGIN` is configured. Outside Deploy Preview, used only when `APP_ORIGIN` is absent. |
 | `RECONCILIATION_CRON_SECRET` | Server-only scheduler credential, separate from all human-session and temporary-token values. |
 | Supabase secret/service-role key | Never configure in this application or as `NEXT_PUBLIC_*`. If an external invite tool needs a secret key, inject it only into that trusted tool. |
 
@@ -81,11 +82,14 @@ Never log cookies, CSRF tokens, invite links, Authorization headers, database UR
 
 - Local development sets `APP_ORIGIN=http://localhost:3000` and permits `http://localhost:3000/auth/confirm` in Supabase Auth Redirect URLs.
 - Netlify Production sets `APP_ORIGIN` to its exact HTTPS application origin. Supabase Site URL and Redirect URLs must allow `<production-origin>/auth/confirm`.
-- Netlify Deploy Previews omit `APP_ORIGIN`. The application uses Netlify's `DEPLOY_PRIME_URL`; Supabase Redirect URLs must allow the restricted site pattern `https://**--<netlify-site>.netlify.app/**`, which covers `/auth/confirm` for preview URLs. Do not configure that wildcard as `APP_ORIGIN`.
+- Netlify Deploy Previews (`CONTEXT=deploy-preview`) use the validated `DEPLOY_PRIME_URL` origin, ignoring a generic or inherited `APP_ORIGIN`. If the Preview URL is missing or invalid, sign-in and unsafe admin requests fail closed instead of falling back to production. Supabase Redirect URLs must allow the restricted site pattern `https://**--<netlify-site>.netlify.app/**`, which covers `/auth/confirm` for preview URLs. Never configure a wildcard or callback path as an application origin.
+
+Request a fresh sign-in link from the intended Preview and open it in the same browser that requested it: the PKCE verifier cookie belongs to that host. The callback must return to `<preview-origin>/auth/confirm`; successful confirmation redirects to `/admin` on that same origin. This local origin selection does not configure Supabase's redirect allow list or verify deployed Netlify settings.
 
 ## Verification checklist
 
 - [ ] Supabase Site URL is the production origin; Redirect URLs allow local/production `/auth/confirm` plus the restricted Netlify Preview pattern.
+- [ ] The deployed Preview has `CONTEXT=deploy-preview` and a valid exact `DEPLOY_PRIME_URL`; a fresh same-browser sign-in link returns to that Preview, not Production.
 - [ ] Invite was sent by a project owner or trusted external admin process; no secret/service-role key reached the application or browser.
 - [ ] The bootstrap SQL matched exactly one intended Auth UUID and returned an active membership.
 - [ ] An invited operator can sign in, refresh, open `/admin`, and complete one approved same-origin action with an audit record.
@@ -97,10 +101,16 @@ Never log cookies, CSRF tokens, invite links, Authorization headers, database UR
 
 | Situation | Immediate response |
 | --- | --- |
-| Invite link fails or redirects incorrectly | Do not change application redirects ad hoc. Correct the Supabase Site URL/allow list, send a new invite, and re-check the exact production origin. |
+| Invite link fails or redirects incorrectly | Check the intended environment's origin, Preview system variables, and Supabase Site URL/redirect allow list. Request a fresh link and open it in the initiating browser. Do not loosen callback validation or administrator authorization. |
 | Operator is forbidden | Confirm the immutable Auth UUID and active `AdminMembership`; do not add metadata roles or loosen authorization. |
 | Auth or membership is unavailable | Keep the failure closed for admin actions. Public browsing, guest checkout, and reconciliation remain independent. Investigate provider/database availability before retrying. |
 | Cutover must stop | Disable admin catalog routes and deploy the previously verified human cancel/refund boundary if needed. Retain membership and immutable audit data; do not delete it as rollback. |
 | Scheduler fails during auth changes | Restore only its approved `RECONCILIATION_CRON_SECRET` injection and endpoint configuration. Never substitute an admin session or human credential. |
 
 Application rollback does not revoke existing Supabase identities or erase audit history. To remove an operator immediately, set that membership inactive through the same privileged process and retain the record for auditability.
+
+## References
+
+- [Supabase redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls)
+- [Supabase PKCE flow](https://supabase.com/docs/guides/auth/sessions/pkce-flow)
+- [Netlify system environment variables](https://docs.netlify.com/build/configure-builds/environment-variables/)

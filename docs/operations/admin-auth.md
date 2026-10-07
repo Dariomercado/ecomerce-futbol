@@ -86,6 +86,26 @@ Never log cookies, CSRF tokens, invite links, Authorization headers, database UR
 
 Request a fresh sign-in link from the intended Preview and open it in the same browser that requested it: the PKCE verifier cookie belongs to that host. The callback must return to `<preview-origin>/auth/confirm`; successful confirmation redirects to `/admin` on that same origin. This local origin selection does not configure Supabase's redirect allow list or verify deployed Netlify settings.
 
+## Diagnose a rejected sign-in link
+
+A rejected link and an existing session are separate facts. Authorized operators visiting sign-in normally redirect to `/admin`. After `confirmation_failed`, the page verifies active membership and offers continuation using the existing session, without claiming the new link succeeded. Unauthenticated visitors still see the failed-link notice and sign-in form. Forbidden or unavailable authorization never offers continuation.
+
+1. Use the stable Preview alias consistently, not an immutable deploy hostname or Production. Request only one fresh link and open the newest email in the same browser profile that initiated sign-in; different hosts and profiles do not share the PKCE cookie.
+2. Record the deployment revision, approximate UTC time, and whether `/admin` opens. Existing access does not prove that the latest link established the session; the header's Sign out button alone does not prove membership.
+3. An authorized operator may inspect server logs for the fixed `auth_confirmation_failed` event and its category below. Correlate only the time window with approved Supabase Auth logs; never copy callback URLs, codes, token hashes, cookies, email addresses, sessions, or raw provider errors into tickets.
+
+| Category | Meaning and next check |
+| --- | --- |
+| `pkce_verifier_missing` | SDK reports no verifier. Confirm the initiating host and browser profile. |
+| `pkce_verifier_mismatch` | SDK reports `bad_code_verifier`. Confirm the newest link and avoid overlapping requests. |
+| `link_invalid_or_expired` | SDK reports `otp_expired`, `flow_state_not_found`, or `flow_state_expired`; this category does not distinguish expiry from reuse. Request a fresh link. |
+| `rate_limited` | SDK reports `over_request_rate_limit`. Wait before making another request. |
+| `provider_unavailable` | SDK reports a retryable fetch failure or `request_timeout`. Check provider availability. |
+| `confirmation_rejected` | A returned failure has no recognized category. Inspect approved Auth logs in the same time window. |
+| `unexpected_failure` | An unexpected exception has no recognized category. Inspect deployment/runtime health without exposing raw errors. |
+
+Categories are diagnostic hints, not a verified hosted root cause. The callback still rejects failures and never substitutes an existing session for successful confirmation. Logging is best-effort and emits only a fixed event/category. No SMTP, hook, or email-template change is required by this UX/diagnostic correction; investigate delivery configuration only when independent evidence warrants it.
+
 ## Verification checklist
 
 - [ ] Supabase Site URL is the production origin; Redirect URLs allow local/production `/auth/confirm` plus the restricted Netlify Preview pattern.

@@ -32,11 +32,11 @@ Make the Mercado Pago test checkout readable in Netlify Deploy Preview and ensur
 - **Authorized scope:** `src/lib/auth/request-integrity.ts`, `src/lib/auth/request-integrity.test.ts`, `docs/operations/admin-auth.md`.
 - **Acceptance:** when Netlify reports `CONTEXT=deploy-preview` and a valid `DEPLOY_PRIME_URL`, auth redirect origin uses that exact deploy origin even if a generic `APP_ORIGIN` is present; a missing/invalid Preview URL fails closed instead of redirecting to production. Production/other contexts retain existing `APP_ORIGIN` precedence. Never weaken callback validation or admin membership checks.
 - **Checks:** focused request-integrity, auth route, and Supabase server tests; review docs for Preview/production distinction.
-- **Progress:** implemented and independently verified. Exact `CONTEXT=deploy-preview` now uses only a valid `DEPLOY_PRIME_URL`; missing/invalid Preview URLs fail closed. Other contexts retain existing origin precedence. Writer observed RED (13 failed, 37 passed), then GREEN (50 passed across 5 files); parent rerun also passed all 50. Scoped diff check and independent security/documentation review passed. Deployed Preview and Supabase redirect allow-list remain unverified because remote configuration is outside scope. Work-unit commit identity to be recorded after commit.
+- **Progress:** implemented and independently verified. Exact `CONTEXT=deploy-preview` now uses only a valid `DEPLOY_PRIME_URL`; missing/invalid Preview URLs fail closed. Other contexts retain existing origin precedence. Writer observed RED (13 failed, 37 passed), then GREEN (50 passed across 5 files); parent rerun also passed all 50. Scoped diff check and independent security/documentation review passed. Deployed Preview and Supabase redirect allow-list remain unverified because remote configuration is outside scope. Work-unit commit: `cda9ecd` (`fix(auth): keep preview magic links in context`).
 
 ## Progress and next step
 - Read-only repo exploration confirmed the iframe styling boundary and the `APP_ORIGIN`-before-`DEPLOY_PRIME_URL` precedence. A source fix is locally authorized; deployed environment and Supabase redirect settings are not accessible in this scope.
-- Next: implement each task separately, verify, and record work-unit commits and applicable native review assessment before closing.
+- Local implementation is complete. Next: after separately authorized remote publishing/configuration, confirm the hosted iframe contrast and test an admin magic link on Deploy Preview #33; verify the Supabase redirect allow-list includes the Preview callback.
 
 ## Relevant files
 - `src/components/checkout/mercado-pago-card-form.tsx` — Mercado Pago card form integration.

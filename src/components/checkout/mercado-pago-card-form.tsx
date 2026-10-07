@@ -57,6 +57,9 @@ type ThreeDSCloseReason = "completed" | "closed" | "expired";
 
 const tokenizationError = "No se pudo tokenizar la tarjeta. Intentá nuevamente.";
 
+// Provider iframe documents cannot inherit the application's theme colors.
+const protectedFieldStyle = { color: "#f5f5f5", "placeholder-color": "#cfd186" };
+
 export function MercadoPagoCardForm({ publicKey, amount, onTokenized, onTokenizationError, threeDSChallenge, onThreeDSComplete, onThreeDSClose }: MercadoPagoCardFormProps) {
   const instanceId = useId().replace(/:/g, "");
   const formId = `mercado-pago-card-form-${instanceId}`;
@@ -87,9 +90,9 @@ export function MercadoPagoCardForm({ publicKey, amount, onTokenized, onTokeniza
           iframe: true,
           form: {
             id: formId,
-            cardNumber: { id: `${formId}-card-number`, placeholder: "Número de tarjeta" },
-            expirationDate: { id: `${formId}-expiration-date`, placeholder: "MM/AA" },
-            securityCode: { id: `${formId}-security-code`, placeholder: "CVV" },
+            cardNumber: { id: `${formId}-card-number`, placeholder: "Número de tarjeta", style: protectedFieldStyle },
+            expirationDate: { id: `${formId}-expiration-date`, placeholder: "MM/AA", style: protectedFieldStyle },
+            securityCode: { id: `${formId}-security-code`, placeholder: "CVV", style: protectedFieldStyle },
             cardholderName: { id: `${formId}-cardholder-name`, placeholder: "Titular de la tarjeta" },
             issuer: { id: `${formId}-issuer`, placeholder: "Banco emisor" },
             installments: { id: `${formId}-installments`, placeholder: "Cuotas" },
@@ -228,7 +231,7 @@ function ThreeDSChallengeFrame({ challenge, onComplete, onClose }: { challenge: 
 }
 
 function CardIframeField({ id, label }: { id: string; label: string }) {
-  return <div className="grid gap-1.5 text-sm font-medium"><span>{label}</span><div aria-label={label} className="min-h-11 rounded-lg border border-input bg-background p-3" id={id} /></div>;
+  return <div className="grid gap-1.5 text-sm font-medium"><span>{label}</span><div aria-label={label} className="min-h-11 rounded-lg border border-input bg-[#181818] p-3" id={id} /></div>;
 }
 
 function tokenFrom(data: CardFormData | undefined): CardToken | undefined {

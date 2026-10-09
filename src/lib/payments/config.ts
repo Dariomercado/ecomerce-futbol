@@ -8,11 +8,13 @@ export type PaymentConfig = {
 type Environment = Record<string, string | undefined>;
 
 export function loadPaymentConfig(env: Environment = process.env): PaymentConfig {
-  const enabled = env.PAYMENTS_ENABLED === "true";
+  const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN?.trim() || undefined;
+  const publicKey = env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY?.trim() || undefined;
+  const enabled = env.PAYMENTS_ENABLED === "true" && Boolean(accessToken && publicKey);
   return {
     enabled,
-    accessToken: env.MERCADO_PAGO_ACCESS_TOKEN || undefined,
-    publicKey: env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY || undefined,
+    accessToken,
+    publicKey,
     supportedMethodIds: new Set((env.PAYMENT_METHOD_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean)),
   };
 }

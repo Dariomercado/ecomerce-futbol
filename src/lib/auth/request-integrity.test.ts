@@ -19,17 +19,18 @@ function unsafeRequest(headers: HeadersInit = {}) {
 }
 
 describe("admin mutation request integrity", () => {
-  it("uses the explicit application origin before Netlify's trusted deploy primary URL", () => {
+  it.each([undefined, "production", "branch-deploy", "dev"])("preserves explicit-origin precedence outside Deploy Preview (%s)", (context) => {
     expect(loadAppOrigin({
+      CONTEXT: context,
       APP_ORIGIN: "https://shop.example.com",
       DEPLOY_PRIME_URL: "https://deploy-preview-42--shop.netlify.app",
     })).toBe("https://shop.example.com");
   });
 
-  it("uses Netlify's deploy primary URL only when no explicit application origin is configured", () => {
+  it.each([undefined, "production", "branch-deploy", "dev"])("preserves the deploy URL fallback outside Deploy Preview (%s)", (context) => {
     const previewOrigin = "https://deploy-preview-42--shop.netlify.app";
 
-    expect(loadAppOrigin({ DEPLOY_PRIME_URL: previewOrigin })).toBe(previewOrigin);
+    expect(loadAppOrigin({ CONTEXT: context, DEPLOY_PRIME_URL: previewOrigin })).toBe(previewOrigin);
     expect(requireAdminRequestIntegrity(new Request(`${previewOrigin}/api/internal/catalog/products`, {
       method: "POST",
       headers: {
@@ -38,7 +39,50 @@ describe("admin mutation request integrity", () => {
         cookie: `${getAdminCsrfCookieName()}=${csrf}`,
         "x-csrf-token": csrf,
       },
-    }), { DEPLOY_PRIME_URL: previewOrigin })).toEqual({ valid: true });
+    }), { CONTEXT: context, DEPLOY_PRIME_URL: previewOrigin })).toEqual({ valid: true });
+  });
+
+  it.each(["https://shop.example.com", "invalid-origin"])("uses the current Preview origin instead of generic APP_ORIGIN (%s)", (appOrigin) => {
+    const previewOrigin = "https://deploy-preview-42--shop.netlify.app";
+    const previewEnvironment = {
+      CONTEXT: "deploy-preview",
+      APP_ORIGIN: appOrigin,
+      DEPLOY_PRIME_URL: ` ${previewOrigin} `,
+    };
+
+    expect(loadAppOrigin(previewEnvironment)).toBe(previewOrigin);
+    expect(requireAdminRequestIntegrity(unsafeRequest({ origin: previewOrigin }), previewEnvironment)).toEqual({ valid: true });
+    expect(requireAdminRequestIntegrity(unsafeRequest(), previewEnvironment)).toMatchObject({
+      valid: false,
+      code: "ADMIN_ORIGIN_INVALID",
+    });
+  });
+
+  it.each([
+    undefined,
+    "",
+    "   ",
+    "invalid-origin",
+    "https://deploy-preview-42--shop.netlify.app/",
+    "https://deploy-preview-42--shop.netlify.app/auth/confirm",
+    "https://deploy-preview-42--shop.netlify.app?query=value",
+    "https://deploy-preview-42--shop.netlify.app#fragment",
+    "https://user:password@deploy-preview-42--shop.netlify.app",
+    "https://*.netlify.app",
+    "ftp://deploy-preview-42--shop.netlify.app",
+  ])("fails closed for an unavailable or invalid Preview origin without using APP_ORIGIN (%s)", (previewUrl) => {
+    const previewEnvironment = {
+      CONTEXT: "deploy-preview",
+      APP_ORIGIN: env.APP_ORIGIN,
+      DEPLOY_PRIME_URL: previewUrl,
+    };
+
+    expect(loadAppOrigin(previewEnvironment)).toBeNull();
+    expect(requireAdminRequestIntegrity(unsafeRequest(), previewEnvironment)).toEqual({
+      valid: false,
+      status: 503,
+      code: "ADMIN_INTEGRITY_UNAVAILABLE",
+    });
   });
 
   it.each([

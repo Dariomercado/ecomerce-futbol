@@ -124,6 +124,17 @@
   --sidebar-ring: #cfd186;
 }
 
+.mp-card-form__control {
+  min-height: 2.75rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.mp-card-form__control:focus-visible {
+  border-color: var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

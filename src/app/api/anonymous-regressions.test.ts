@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const findProducts = vi.fn();
 const findUnique = vi.fn();
@@ -26,6 +26,10 @@ const validInput = {
 };
 
 describe("anonymous commerce regressions", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     findProducts.mockResolvedValue({
@@ -63,6 +67,10 @@ describe("anonymous commerce regressions", () => {
   });
 
   it("keeps guest checkout available without an auth session", async () => {
+    vi.stubEnv("PAYMENTS_ENABLED", "true");
+    vi.stubEnv("MERCADO_PAGO_ACCESS_TOKEN", "dummy-test-access-token");
+    vi.stubEnv("NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY", "TEST-dummy-public-key");
+
     const { POST } = await import("@/app/api/checkout/orders/route");
 
     const response = await POST(new Request("http://localhost/api/checkout/orders", { method: "POST", body: JSON.stringify(validInput) }));

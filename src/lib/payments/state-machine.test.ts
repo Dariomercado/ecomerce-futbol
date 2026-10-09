@@ -6,7 +6,7 @@ import { applyAuthoritativeProviderState, isAllowedCardRail, redactedPaymentLog,
 describe("payment state machine", () => {
   it("rejects disabled payments and unsupported rails before dispatch", () => {
     expect(isAllowedCardRail(loadPaymentConfig({ PAYMENTS_ENABLED: "false" }), { paymentMethodId: "visa", paymentType: "credit_card" })).toBe(false);
-    const enabled = loadPaymentConfig({ PAYMENTS_ENABLED: "true", MERCADO_PAGO_ACCESS_TOKEN: "secret", PAYMENT_METHOD_IDS: "visa" });
+    const enabled = loadPaymentConfig({ PAYMENTS_ENABLED: "true", MERCADO_PAGO_ACCESS_TOKEN: "secret", NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY: "TEST-public-key", PAYMENT_METHOD_IDS: "visa" });
     expect(isAllowedCardRail(enabled, { paymentMethodId: "visa", paymentType: "credit_card" })).toBe(true);
     expect(isAllowedCardRail(enabled, { paymentMethodId: "pix", paymentType: "account_money" })).toBe(false);
   });

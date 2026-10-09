@@ -54,6 +54,11 @@ function isUnsafeMethod(method: string): boolean {
 }
 
 export function loadAppOrigin(env: Environment = process.env): string | null {
+  if (env.CONTEXT === "deploy-preview") {
+    // Keep PKCE callbacks on the Preview cookie host; never fall back to production.
+    return parseExactHttpOrigin(env.DEPLOY_PRIME_URL?.trim());
+  }
+
   const appOrigin = env.APP_ORIGIN?.trim();
   if (appOrigin) return parseExactHttpOrigin(appOrigin);
 

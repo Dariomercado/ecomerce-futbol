@@ -33,10 +33,23 @@ function CheckoutPageContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
+  const [availabilityChecked, setAvailabilityChecked] = useState(false);
   const [threeDSChallenge, setThreeDSChallenge] = useState<ThreeDSChallenge | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const paymentIntent = useRef<PaymentIntent | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/checkout/config")
+      .then(async (response) => {
+        const config = await response.json() as PaymentConfig;
+        if (active) setPaymentConfig(response.ok ? config : { enabled: false });
+      })
+      .catch(() => { if (active) setPaymentConfig({ enabled: false }); })
+      .finally(() => { if (active) setAvailabilityChecked(true); });
+    return () => { active = false; };
+  }, []);
 
   async function refreshOrderStatus() {
     if (!createdOrder) return;
@@ -65,6 +78,16 @@ function CheckoutPageContent() {
     setIsSubmittingOrder(true);
     const formData = new FormData(event.currentTarget);
     try {
+      const configResponse = await fetch("/api/checkout/config");
+      const config = await configResponse.json() as PaymentConfig;
+      if (!configResponse.ok || !config.enabled || !config.publicKey) {
+        setPaymentConfig({ enabled: false });
+        setAvailabilityChecked(true);
+        setMessage("El checkout no está disponible porque la configuración de pagos está incompleta. No se reservará ningún pedido.");
+        return;
+      }
+      setPaymentConfig(config);
+
       const response = await fetch("/api/checkout/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,13 +100,6 @@ function CheckoutPageContent() {
       const body = await response.json() as CreatedOrder | CheckoutError;
       if (!response.ok || !("order" in body)) {
         setMessage("message" in body ? body.message : "No pudimos iniciar el pedido.");
-        return;
-      }
-
-      const configResponse = await fetch("/api/checkout/config");
-      const config = await configResponse.json() as PaymentConfig;
-      if (!configResponse.ok || !config.enabled || !config.publicKey) {
-        setMessage(`Pedido ${body.order.id} registrado. Los pagos con tarjeta no están disponibles en este momento.`);
         return;
       }
 
@@ -134,7 +150,7 @@ function CheckoutPageContent() {
 
   if (items.length === 0 && !directCheckout) return <main className="mx-auto w-full max-w-3xl px-4 py-10"><h1 className="font-heading text-4xl font-bold">Checkout</h1><p className="mt-4 text-muted-foreground">Tu carrito está vacío.</p><Button asChild className="mt-6"><Link href="/catalogo">Ver catálogo</Link></Button></main>;
   const checkoutTotal = directCheckout ? directCheckout.price : total;
-  return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"><p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">Compra como invitado</p><h1 className="mt-2 font-heading text-4xl font-bold">Checkout</h1>{directCheckout ? <p className="mt-3 text-sm text-muted-foreground">Compra directa · un producto seleccionado</p> : null}<p className="mt-3 text-muted-foreground">No necesitás una cuenta para completar tus datos de entrega.</p><form className="mt-8 grid gap-4 rounded-3xl border border-border bg-card p-6" onSubmit={submitOrder}><label>Nombre completo<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="fullName" required /></label><label>Email<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="email" required type="email" /></label><label>Teléfono<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="phone" required /></label><label>Dirección<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine1" required /></label><label>Departamento, piso o referencia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine2" /></label><div className="grid gap-4 sm:grid-cols-3"><label>Ciudad<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="city" required /></label><label>Provincia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="province" required /></label><label>Código postal<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="postalCode" required /></label></div><div className="flex items-center justify-between border-t border-border pt-4"><span className="font-semibold">{directCheckout ? "Estimación" : "Total a verificar"}</span>{checkoutTotal === null ? <span className="font-semibold">Se calculará en el servidor.</span> : <span className="font-semibold">${checkoutTotal.toLocaleString("es-AR")}</span>}</div><p className="text-sm text-muted-foreground">El total final se calcula nuevamente con el catálogo en el servidor.</p><Button type="submit" disabled={isSubmittingOrder || Boolean(createdOrder)}>{createdOrder ? "Pedido registrado" : isSubmittingOrder ? "Registrando pedido…" : "Continuar con el pedido"}</Button>{message ? <p aria-live="polite" className="text-sm">{message}</p> : null}</form>{createdOrder && paymentConfig?.publicKey ? <section className="mt-6 rounded-3xl border border-border bg-card p-6"><h2 className="font-heading text-2xl font-bold">Pago con tarjeta</h2><p className="mt-2 text-sm text-muted-foreground">Los datos de tu tarjeta se completan de forma segura con Mercado Pago.</p><MercadoPagoCardForm amount={createdOrder.order.total} onThreeDSClose={(reason) => { setThreeDSChallenge(null); if (reason === "expired") setMessage("La autenticación 3DS venció. Intentá nuevamente."); if (reason === "closed") setMessage("La autenticación 3DS fue cancelada. Podés intentar nuevamente."); }} onThreeDSComplete={() => setMessage("La autenticación 3DS fue recibida. Confirmaremos el estado con Mercado Pago.")} onTokenizationError={setMessage} onTokenized={submitTokenizedPayment} publicKey={paymentConfig.publicKey} threeDSChallenge={threeDSChallenge} /><Button type="button" variant="outline" onClick={() => void refreshOrderStatus()}>Verificar estado del pago</Button></section> : null}</main>;
+  return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"><p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">Compra como invitado</p><h1 className="mt-2 font-heading text-4xl font-bold">Checkout</h1>{directCheckout ? <p className="mt-3 text-sm text-muted-foreground">Compra directa · un producto seleccionado</p> : null}<p className="mt-3 text-muted-foreground">No necesitás una cuenta para completar tus datos de entrega.</p>{availabilityChecked && paymentConfig?.enabled && paymentConfig.publicKey ? <p className="mt-4 rounded-lg border border-border bg-muted p-3 text-sm" role="status">Checkout de demostración: usá únicamente tarjetas de prueba de Mercado Pago. Nunca ingreses los datos de una tarjeta real.</p> : null}{availabilityChecked && (!paymentConfig?.enabled || !paymentConfig.publicKey) ? <p className="mt-4 rounded-lg border border-border bg-muted p-3 text-sm" role="status">El checkout no está disponible porque la configuración de pagos está incompleta. No se reservará ningún pedido.</p> : null}{!availabilityChecked ? <p className="mt-4 text-sm text-muted-foreground" role="status">Verificando disponibilidad del checkout…</p> : null}<form className="mt-8 grid gap-4 rounded-3xl border border-border bg-card p-6" onSubmit={submitOrder}><label>Nombre completo<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="fullName" required /></label><label>Email<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="email" required type="email" /></label><label>Teléfono<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="phone" required /></label><label>Dirección<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine1" required /></label><label>Departamento, piso o referencia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="addressLine2" /></label><div className="grid gap-4 sm:grid-cols-3"><label>Ciudad<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="city" required /></label><label>Provincia<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="province" required /></label><label>Código postal<input className="mt-1 w-full rounded-md border border-input bg-background p-2" name="postalCode" required /></label></div><div className="flex items-center justify-between border-t border-border pt-4"><span className="font-semibold">{directCheckout ? "Estimación" : "Total a verificar"}</span>{checkoutTotal === null ? <span className="font-semibold">Se calculará en el servidor.</span> : <span className="font-semibold">${checkoutTotal.toLocaleString("es-AR")}</span>}</div><p className="text-sm text-muted-foreground">El total final se calcula nuevamente con el catálogo en el servidor.</p><Button type="submit" disabled={!availabilityChecked || !paymentConfig?.enabled || !paymentConfig.publicKey || isSubmittingOrder || Boolean(createdOrder)}>{createdOrder ? "Pedido registrado" : isSubmittingOrder ? "Registrando pedido…" : "Continuar con el pedido"}</Button>{message ? <p aria-live="polite" className="text-sm">{message}</p> : null}</form>{createdOrder && paymentConfig?.publicKey ? <section className="mt-6 rounded-3xl border border-border bg-card p-6"><h2 className="font-heading text-2xl font-bold">Pago con tarjeta</h2><p className="mt-2 text-sm text-muted-foreground">Usá únicamente tarjetas de prueba de Mercado Pago. Nunca ingreses los datos de una tarjeta real.</p><MercadoPagoCardForm amount={createdOrder.order.total} onThreeDSClose={(reason) => { setThreeDSChallenge(null); if (reason === "expired") setMessage("La autenticación 3DS venció. Intentá nuevamente."); if (reason === "closed") setMessage("La autenticación 3DS fue cancelada. Podés intentar nuevamente."); }} onThreeDSComplete={() => setMessage("La autenticación 3DS fue recibida. Confirmaremos el estado con Mercado Pago.")} onTokenizationError={setMessage} onTokenized={submitTokenizedPayment} publicKey={paymentConfig.publicKey} threeDSChallenge={threeDSChallenge} /><Button type="button" variant="outline" onClick={() => void refreshOrderStatus()}>Verificar estado del pago</Button></section> : null}</main>;
 }
 
 export default function CheckoutPage() {

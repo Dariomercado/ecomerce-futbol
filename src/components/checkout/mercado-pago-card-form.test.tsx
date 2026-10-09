@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadMercadoPago = vi.fn();
@@ -61,6 +61,41 @@ describe("MercadoPagoCardForm", () => {
     });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it("gives every protected iframe readable text and placeholders on a stable dark surface", async () => {
+    const { MercadoPagoCardForm } = await import("./mercado-pago-card-form");
+
+    render(<MercadoPagoCardForm publicKey="TEST-public-key" amount={18000} onTokenized={vi.fn()} />);
+    await act(async () => {});
+
+    const options = cardForm.mock.calls[0]?.[0] as { form: Record<string, { id: string; style?: Record<string, string> }> };
+    for (const field of ["cardNumber", "expirationDate", "securityCode"]) {
+      expect(options.form[field].style).toEqual({ color: "#f5f5f5", "placeholder-color": "#cfd186" });
+      expect(document.getElementById(options.form[field].id)).toHaveClass("bg-[#181818]");
+      for (const color of Object.values(options.form[field].style!)) {
+        expect(contrastRatio(color, "#181818")).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("keeps card credentials empty and links preview testers to official test-card instructions", async () => {
+    const { MercadoPagoCardForm } = await import("./mercado-pago-card-form");
+
+    const { container } = render(<MercadoPagoCardForm publicKey="TEST-public-key" amount={18000} onTokenized={vi.fn()} />);
+    await act(async () => {});
+
+    const form = within(container);
+    expect(form.getByText("Encontrá tarjetas de prueba y escenarios compatibles en la guía oficial de Mercado Pago.")).toBeInTheDocument();
+    expect(form.getByRole("link", { name: "Consultar tarjetas de prueba y escenarios" })).toHaveAttribute(
+      "href",
+      "https://www.mercadopago.com.ar/developers/es/docs/split-payments/additional-content/your-integrations/test/cards",
+    );
+    expect(form.getByLabelText("Número de tarjeta")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Vencimiento")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Código de seguridad")).toBeEmptyDOMElement();
+    expect(form.getByLabelText("Titular de la tarjeta")).toHaveValue("");
+    expect(form.getByLabelText("Email del titular")).toHaveValue("");
   });
 
   it("keeps tokenization failures local and never exposes PAN or CVV fields to the component", async () => {
@@ -146,3 +181,15 @@ describe("MercadoPagoCardForm", () => {
     expect(onThreeDSClose).toHaveBeenCalledWith("expired");
   });
 });
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = hex.slice(1).match(/.{2}/g)!.map((channel) => {
+      const value = parseInt(channel, 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const values = [luminance(foreground), luminance(background)];
+  return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+}

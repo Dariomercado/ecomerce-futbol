@@ -294,7 +294,7 @@ function ImageFields({ availableVariantSkus, fileInputRef, form, onAddFiles, onR
       Drop JPEG, PNG, or WebP files here, or press Enter to choose files. Maximum 5 MiB each; up to 8 images.
     </div>
     {form.images.map((image, index) => <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" key={image.id}>
-      {image.file ? <div className="sm:col-span-2"><img alt={`Local preview for ${image.file.name}`} className="h-32 w-32 rounded object-cover" src={image.previewUrl} /><p className="mt-1 text-xs text-muted-foreground">{image.file.name}</p></div> : <Field helperText="Paste the public HTTPS address where the product image is hosted." label={`Image URL ${index + 1}`}><input required type="url" value={image.url} onChange={(event) => updateImage(setForm, index, "url", event.target.value)} /></Field>}
+      {image.file ? <div className="sm:col-span-2"><img alt={`Local preview for ${image.file.name}`} className="h-32 w-32 rounded object-cover" src={image.previewUrl} /><p className="mt-1 text-xs text-muted-foreground">{image.file.name}</p></div> : <Field helperText="Use a /catalog/ image path or a public HTTPS address." label={`Image URL ${index + 1}`}><input required type="text" ref={(input) => { input?.setCustomValidity(!image.url || isValidImageReference(image.url) ? "" : "Use a /catalog/ image path or a valid HTTPS address."); }} value={image.url} onChange={(event) => updateImage(setForm, index, "url", event.target.value)} /></Field>}
       <Field helperText="Describe the image for screen readers and when it cannot load." label={`Alt text ${index + 1}`}><input required value={image.alt} onChange={(event) => updateImage(setForm, index, "alt", event.target.value)} /></Field>
       <Field label={`Linked variant ${index + 1}`}><select value={image.variantSku ?? ""} onChange={(event) => updateImage(setForm, index, "variantSku", event.target.value || null)}><option value="">No variant link</option>{availableVariantSkus.map((sku) => <option key={sku} value={sku}>{sku}</option>)}</select></Field>
       <label className="flex items-center gap-2 text-sm font-medium"><input checked={image.isPrimary} onChange={() => setPrimaryImage(setForm, index)} type="radio" name="primary-image" /> Primary image</label>
@@ -305,6 +305,21 @@ function ImageFields({ availableVariantSkus, fileInputRef, form, onAddFiles, onR
   </fieldset>;
 }
 const fieldControlClassName = "mt-1 min-h-10 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+
+function isValidImageReference(value: string): boolean {
+  if (/[\s\\]/.test(value)) return false;
+  try {
+    if (value.startsWith("/catalog/")) {
+      const path = new URL(value, "https://catalog.invalid").pathname;
+      return path.startsWith("/catalog/") && path.length > "/catalog/".length;
+    }
+    if (!/^https:\/\//i.test(value)) return false;
+    const url = new URL(value);
+    return url.protocol === "https:" && !!url.hostname && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
 
 function Field({ children, helperText, label }: { children: React.ReactNode; helperText?: string; label: string }) {
   const generatedControlId = useId();

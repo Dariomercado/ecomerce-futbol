@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutateAdminCatalog = vi.hoisted(() => vi.fn());
@@ -24,11 +24,178 @@ function mockSeededLoad(fetchMock: ReturnType<typeof vi.fn>) {
   fetchMock.mockResolvedValueOnce(response({ ...page, data: [{ ...product, images: [{ ...product.images[0], url: seededImageUrl }] }] }))
     .mockResolvedValueOnce(response([category])).mockResolvedValueOnce(response([brand]));
 }
+function fillNewProduct(withFile = false) {
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "New boot" } });
+  fireEvent.change(screen.getByLabelText("Description"), { target: { value: "New boot details" } });
+  fireEvent.change(screen.getByLabelText("Category"), { target: { value: category.id } });
+  fireEvent.change(screen.getByLabelText("Brand"), { target: { value: brand.id } });
+  fireEvent.change(screen.getByLabelText("Price (ARS)"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Variant name 1"), { target: { value: "New variant" } });
+  fireEvent.change(screen.getByLabelText("SKU 1"), { target: { value: "NEW-40" } });
+  if (withFile) {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:new-preview");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    fireEvent.change(screen.getByLabelText("Choose product images"), { target: { files: [new File(["image"], "new.png", { type: "image/png" })] } });
+  } else {
+    fireEvent.change(screen.getByLabelText("Image URL 1"), { target: { value: seededImageUrl } });
+    fireEvent.change(screen.getByLabelText("Alt text 1"), { target: { value: "New boot" } });
+  }
+}
+const newProduct = { ...product, id: "66666666-6666-4666-8666-666666666666", name: "New boot", slug: "new-boot", featured: false };
+const uploadedNewImage = { path: `${newProduct.id}/new.png`, url: "https://storage.example.test/new.png", mimeType: "image/png", sizeBytes: 5 };
 
 describe("AdminCatalogCrud", () => {
   const fetchMock = vi.fn();
   beforeEach(() => { vi.stubGlobal("fetch", fetchMock); vi.stubGlobal("confirm", vi.fn(() => true)); fetchMock.mockReset(); mutateAdminCatalog.mockReset(); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it.each(["create", "update"])("preserves %s success feedback after refresh", async (operation) => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    if (operation === "create") fillNewProduct();
+    else fireEvent.click(screen.getByRole("button", { name: /Control FG/ }));
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: operation === "create" ? newProduct : product });
+    mockInitialLoad(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: operation === "create" ? "Create product" : "Save complete product" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
+    expect(await screen.findByRole("status")).toHaveTextContent(operation === "create" ? "Product created." : "Product updated.");
+    expect(screen.getByRole("heading", { name: "Edit product" })).toBeInTheDocument();
+  });
+
+  it("keeps the saved editor and distinguishes a refresh failure from a save failure", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct();
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: newProduct });
+    fetchMock.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Product created.");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Catalog refresh failed"));
+    expect(screen.getByLabelText("Name")).toHaveValue("New boot");
+    expect(screen.getByRole("button", { name: /New boot/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Save complete product" })).toBeEnabled();
+  });
+
+  it("locks context during saving and background refresh without removing the editor", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
+    let resolveSave!: (value: unknown) => void;
+    let resolveRefresh!: (value: Response) => void;
+    mutateAdminCatalog.mockReturnValueOnce(new Promise((resolve) => { resolveSave = resolve; }));
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => { resolveRefresh = resolve; }))
+      .mockResolvedValueOnce(response([category])).mockResolvedValueOnce(response([brand]));
+    fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
+    expect(screen.getByRole("button", { name: "New product" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Control FG/ })).toBeDisabled();
+    expect(screen.getByLabelText("Name")).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Saving product");
+    await act(async () => resolveSave({ ok: true, product }));
+    expect(screen.getByLabelText("Name")).toHaveValue(product.name);
+    expect(screen.getByRole("button", { name: "New product" })).toBeDisabled();
+    await act(async () => resolveRefresh(response(page)));
+    expect(screen.getByRole("button", { name: "New product" })).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Product updated.");
+  });
+
+  it.each(["draft", "published"])("stages PC-only creation as Draft and honors intended %s after attachment", async (status) => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct(true);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: status } });
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...newProduct, status: "draft" } })
+      .mockResolvedValueOnce({ ok: true, product: { ...newProduct, status } });
+    fetchMock.mockResolvedValueOnce(response({ images: [uploadedNewImage] }));
+    mockInitialLoad(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledTimes(2));
+    expect(mutateAdminCatalog.mock.calls[0][0]).toMatchObject({ operation: "create", input: { status: "draft" } });
+    expect(mutateAdminCatalog.mock.calls[1][0]).toMatchObject({ operation: "update", productId: newProduct.id, input: { status, images: [expect.objectContaining({ storagePath: uploadedNewImage.path })] } });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Product saved and images uploaded."));
+  });
+
+  it("adopts a failed-upload create as Draft and retries the same identity by update", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct(true);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "published" } });
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...newProduct, status: "draft" } });
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ code: "STORAGE_UNAVAILABLE" }) });
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("saved as Draft");
+    expect(screen.getByRole("status")).toHaveTextContent("Image storage is temporarily unavailable");
+    expect(screen.getByRole("button", { name: /New boot/ })).toHaveTextContent("draft");
+    expect(screen.getByLabelText("Status")).toHaveValue("published");
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...newProduct, status: "draft" } })
+      .mockResolvedValueOnce({ ok: true, product: newProduct });
+    fetchMock.mockResolvedValueOnce(response({ images: [uploadedNewImage] }));
+    mockInitialLoad(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledTimes(3));
+    expect(mutateAdminCatalog.mock.calls[1][0]).toMatchObject({ operation: "update", productId: newProduct.id, input: { status: "draft" } });
+    expect(mutateAdminCatalog.mock.calls[2][0].input.status).toBe("published");
+  });
+
+  it("retains uploaded metadata after attachment failure and retries without reupload", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct(true);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "published" } });
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...newProduct, status: "draft" } })
+      .mockResolvedValueOnce({ ok: false, code: "CATALOG_CONFLICT" });
+    fetchMock.mockResolvedValueOnce(response({ images: [uploadedNewImage] }));
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("images uploaded but attachment failed");
+    expect(screen.getByRole("status")).toHaveTextContent("saved as Draft");
+    expect(screen.getByLabelText("Image URL 1")).toHaveValue(uploadedNewImage.url);
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: newProduct });
+    mockInitialLoad(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: "Save complete product" }));
+    await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledTimes(3));
+    expect(mutateAdminCatalog.mock.calls[2][0]).toMatchObject({ operation: "update", productId: newProduct.id, input: { status: "published", images: [expect.objectContaining({ storagePath: uploadedNewImage.path })] } });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/images"))).toHaveLength(1);
+  });
+
+  it("explains publication and homepage visibility without changing the selected status", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    expect(screen.getByText(/Draft products are visible only in admin/)).toBeInTheDocument();
+    expect(screen.getByText(/Featured products appear on the homepage only when Published/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toHaveValue("draft");
+    expect(screen.getByLabelText("Featured product")).not.toBeChecked();
+  });
+
+  it("does not report successful attachment when upload returns fewer files than requested", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct(true);
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...newProduct, status: "draft" } });
+    fetchMock.mockResolvedValueOnce(response({ images: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("New images were not attached"));
+    expect(screen.getByAltText("Local preview for new.png")).toBeInTheDocument();
+    expect(mutateAdminCatalog).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Save complete product" })).toBeEnabled();
+  });
+
+  it("reports an initial save failure without creating an identity or uploading files", async () => {
+    mockInitialLoad(fetchMock);
+    render(<AdminCatalogCrud />);
+    await screen.findByLabelText("Name");
+    fillNewProduct(true);
+    mutateAdminCatalog.mockResolvedValueOnce({ ok: false, code: "CATALOG_CONFLICT" });
+    fireEvent.click(screen.getByRole("button", { name: "Create product" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("unique slug"));
+    expect(screen.getByRole("button", { name: "Create product" })).toBeEnabled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 
   it("loads catalog and taxonomy before rendering an editable product", async () => {
     mockInitialLoad(fetchMock);
@@ -211,9 +378,13 @@ describe("AdminCatalogCrud", () => {
     render(<AdminCatalogCrud />);
     fireEvent.click(await screen.findByRole("button", { name: /Control FG/ }));
     mutateAdminCatalog.mockResolvedValueOnce({ ok: true, product: { ...product, status: "archived", isActive: false } });
+    mockInitialLoad(fetchMock);
     fireEvent.click(screen.getByRole("button", { name: "Archive product" }));
     await waitFor(() => expect(mutateAdminCatalog).toHaveBeenCalledWith({ operation: "archive", productId: product.id }));
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("DELETE"))).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Restore as draft" })).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("Product archived.");
+    expect(screen.getByRole("button", { name: "Save complete product" })).toBeDisabled();
   });
 
   it("restores an archived product as a draft through the server action", async () => {
@@ -228,5 +399,9 @@ describe("AdminCatalogCrud", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore as draft" }));
     await waitFor(() => expect(mutateAdminCatalog).toHaveBeenLastCalledWith({ operation: "restore", productId: product.id }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save complete product" })).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("Product restored as Draft.");
+    expect(screen.getByLabelText("Status")).toHaveValue("draft");
+    expect(screen.getByRole("button", { name: /Control FG/ })).toHaveTextContent("draft");
   });
 });

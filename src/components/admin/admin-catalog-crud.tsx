@@ -57,13 +57,15 @@ export function AdminCatalogCrud() {
   const [form, setForm] = useState<ProductForm>(createEmptyForm);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [mutationState, setMutationState] = useState<"idle" | "saving" | "archiving" | "restoring">("idle");
+  const [mutationState, setMutationState] = useState<"idle" | "saving" | "uploading" | "attaching" | "refreshing" | "archiving" | "restoring">("idle");
+  const [uploadDraftId, setUploadDraftId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const objectUrls = useRef(new Set<string>());
 
   const selectedProduct = products.find((product) => product.id === selectedId) ?? null;
-  const isEditing = selectedProduct !== null;
+  const isEditing = selectedId !== null;
+  const isBusy = mutationState !== "idle";
   const isArchived = selectedProduct?.status === "archived" || selectedProduct?.status === "ARCHIVED";
   const availableVariantSkus = useMemo(
     () => form.variants.flatMap((variant) => variant.sku.trim() ? [variant.sku.trim()] : []),
@@ -82,9 +84,8 @@ export function AdminCatalogCrud() {
 
   useEffect(() => () => clearLocalPreviews(), []);
 
-  async function loadCatalog() {
-    setState("loading");
-    setMessage(null);
+  async function loadCatalog(background = false, retainedProduct?: AdminProduct) {
+    if (!background) setState("loading");
     try {
       const [productsResponse, categoriesResponse, brandsResponse] = await Promise.all([
         fetch("/api/internal/catalog/products?page=1&limit=50", { credentials: "same-origin" }),
@@ -100,21 +101,25 @@ export function AdminCatalogCrud() {
       ]);
       if (!isProductList(productList) || !Array.isArray(categoryList) || !Array.isArray(brandList)) throw new Error("ADMIN_CATALOG_LOAD_FAILED");
 
-      setProducts(productList.data);
+      setProducts(retainedProduct
+        ? [retainedProduct, ...productList.data.filter((product) => product.id !== retainedProduct.id)] : productList.data);
       setCategories(categoryList as CategorySummary[]);
       setBrands(brandList as BrandSummary[]);
       setState("ready");
     } catch {
-      setState("error");
+      if (background) setMessage((current) => `${current ?? ""} Catalog refresh failed. Your saved changes are retained; reload the page to refresh the list.`.trim());
+      else setState("error");
     }
   }
 
   useEffect(() => {
-    void Promise.resolve().then(loadCatalog);
+    void Promise.resolve().then(() => loadCatalog());
   }, []);
 
   function startCreate() {
+    if (isBusy) return;
     setSelectedId(null);
+    setUploadDraftId(null);
     clearLocalPreviews();
     setForm(createEmptyForm());
     setSlugManuallyEdited(false);
@@ -122,6 +127,7 @@ export function AdminCatalogCrud() {
   }
 
   function startEdit(product: AdminProduct) {
+    if (isBusy) return;
     setSelectedId(product.id);
     clearLocalPreviews();
     setForm(formFromProduct(product));
@@ -134,6 +140,7 @@ export function AdminCatalogCrud() {
   }
 
   function addFiles(files: FileList | File[]) {
+    if (isBusy || isArchived) return;
     const candidates = Array.from(files);
     const currentImages = form.images.filter((image) => image.file || image.url.trim());
     const accepted: File[] = [];
@@ -162,9 +169,13 @@ export function AdminCatalogCrud() {
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isBusy || isArchived) return;
+    const wasEditing = isEditing;
     const pendingImages = form.images.filter((image) => image.file);
     const initialForm = pendingImages.length ? formWithUploadPlaceholder(form) : form;
-    const input = toProductInput(initialForm);
+    // Keep new PC-image products private until the actual uploaded images are attached.
+    const stageAsDraft = pendingImages.length > 0 && (!wasEditing || uploadDraftId === selectedId);
+    const input = toProductInput(stageAsDraft ? { ...initialForm, status: "draft" } : initialForm);
     if (!input) {
       setMessage("Price, comparison price, and stock must be whole numbers. A comparison price must be higher than the price.");
       return;
@@ -172,7 +183,9 @@ export function AdminCatalogCrud() {
     if (isEditing && !selectedId) return;
 
     setMutationState("saving");
-    setMessage(null);
+    setMessage("Saving product...");
+    let savedProduct: AdminProduct | null = null;
+    let stage: "saving" | "uploading" | "attaching" = "saving";
     try {
       // PATCH is replacement semantics: this sends every product, variant, and image field, never a partial patch.
       const result = await mutateAdminCatalog(isEditing
@@ -182,45 +195,69 @@ export function AdminCatalogCrud() {
 
       const saved: unknown = result.product;
       if (!isSavedProduct(saved)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+      savedProduct = saved;
+      // Creation is already durable even if uploading or attaching the images later fails.
+      setSelectedId(saved.id);
+      setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
+      setSlugManuallyEdited(true);
+      if (stageAsDraft) setUploadDraftId(saved.id);
       let finalForm = initialForm;
       if (pendingImages.length) {
         const controller = new AbortController();
         try {
+          stage = "uploading";
+          setMutationState("uploading");
+          setMessage(stageAsDraft ? "Product saved as Draft. Uploading images..." : "Product saved. Uploading images...");
           const uploaded = await uploadProductImages(saved.id, pendingImages.map((image) => image.file!), controller.signal);
           finalForm = replacePendingImages(initialForm, uploaded);
+          // Preserve uploaded references on attachment failure so retry does not upload again.
+          setForm(finalForm);
+          pendingImages.forEach((image) => revokeObjectUrl(image.previewUrl));
           const finalInput = toProductInput(finalForm);
           if (!finalInput) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+          stage = "attaching";
+          setMutationState("attaching");
+          setMessage("Images uploaded. Attaching images to the product...");
           const finalResult = await mutateAdminCatalog({ operation: "update", productId: saved.id, input: finalInput });
           if (!finalResult.ok) throw new Error(finalResult.code);
-          pendingImages.forEach((image) => revokeObjectUrl(image.previewUrl));
+          if (!isSavedProduct(finalResult.product)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+          const attachedProduct = finalResult.product;
+          savedProduct = attachedProduct;
+          setProducts((current) => [attachedProduct, ...current.filter((product) => product.id !== saved.id)]);
         } catch (error) {
           controller.abort();
           throw error;
         }
       }
-      setSelectedId(saved.id);
       setForm(finalForm);
-      setSlugManuallyEdited(true);
-      setMessage(pendingImages.length ? "Product saved and images uploaded." : isEditing ? "Product updated." : "Product created.");
-      setSlugManuallyEdited(true);
-      await loadCatalog();
+      setUploadDraftId(null);
+      setMessage(pendingImages.length ? "Product saved and images uploaded." : wasEditing ? "Product updated." : "Product created.");
+      setMutationState("refreshing");
+      await loadCatalog(true, savedProduct);
     } catch (error) {
-      setMessage(errorMessage(error));
+      const savedNotice = stageAsDraft ? "Product saved as Draft and remains hidden from the public catalog." : "Product details were saved.";
+      if (savedProduct && stage !== "saving") {
+        setMessage(`${savedNotice} ${stage === "attaching" ? "The images uploaded but attachment failed. Retry saving to attach them without uploading again." : "New images were not attached. Retry saving to upload them."} ${errorMessage(error)}`);
+      } else setMessage(errorMessage(error));
     } finally {
       setMutationState("idle");
     }
   }
 
   async function archiveProduct() {
-    if (!selectedId || isArchived) return;
+    if (!selectedId || isArchived || isBusy) return;
     if (!window.confirm(`Archive ${selectedProduct?.name ?? "this product"}? It will be removed from the active catalog while its data is retained.`)) return;
     setMutationState("archiving");
     setMessage(null);
     try {
       const result = await mutateAdminCatalog({ operation: "archive", productId: selectedId });
       if (!result.ok) throw new Error(result.code);
+      if (!isSavedProduct(result.product)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+      const archived = result.product;
+      setProducts((current) => [archived, ...current.filter((product) => product.id !== archived.id)]);
       setMessage("Product archived. It remains in the catalog history and cannot be edited.");
-      await loadCatalog();
+      setMutationState("refreshing");
+      await loadCatalog(true, archived);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -229,13 +266,19 @@ export function AdminCatalogCrud() {
   }
 
   async function restoreProduct() {
-    if (!selectedId || !isArchived) return;
+    if (!selectedId || !isArchived || isBusy) return;
     setMutationState("restoring");
     setMessage(null);
     try {
       const result = await mutateAdminCatalog({ operation: "restore", productId: selectedId });
       if (!result.ok) throw new Error(result.code);
-      await loadCatalog();
+      if (!isSavedProduct(result.product)) throw new Error("ADMIN_CATALOG_SAVE_FAILED");
+      const restored = result.product;
+      setProducts((current) => [restored, ...current.filter((product) => product.id !== restored.id)]);
+      setForm(formFromProduct(restored));
+      setMessage("Product restored as Draft. Publish it when it is ready for the public catalog.");
+      setMutationState("refreshing");
+      await loadCatalog(true, restored);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -251,16 +294,17 @@ export function AdminCatalogCrud() {
       <aside className="rounded-lg border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div><h1 className="text-2xl font-semibold">Catalog</h1><p className="mt-1 text-sm text-muted-foreground">{products.length} loaded product{products.length === 1 ? "" : "s"}</p></div>
-          <button className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" onClick={startCreate} type="button">New product</button>
+          <button className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" disabled={isBusy} onClick={startCreate} type="button">New product</button>
         </div>
         <ul aria-label="Catalog products" className="mt-5 space-y-2">
-          {products.map((product) => <li key={product.id}><button aria-pressed={selectedId === product.id} className="w-full rounded-md border p-3 text-left hover:bg-muted aria-pressed:border-primary" onClick={() => startEdit(product)} type="button"><span className="block font-medium">{product.name}</span><span className="mt-1 block text-xs text-muted-foreground">{statusLabel(product.status)} - {formatArs(product.price)}</span></button></li>)}
+          {products.map((product) => <li key={product.id}><button aria-pressed={selectedId === product.id} disabled={isBusy} className="w-full rounded-md border p-3 text-left hover:bg-muted aria-pressed:border-primary" onClick={() => startEdit(product)} type="button"><span className="block font-medium">{product.name}</span><span className="mt-1 block text-xs text-muted-foreground">{statusLabel(product.status)} - {formatArs(product.price)}</span></button></li>)}
           {products.length === 0 ? <li className="rounded-md bg-muted p-3 text-sm text-muted-foreground">No products yet. Create the first catalog product.</li> : null}
         </ul>
       </aside>
 
       <div className="rounded-lg border bg-card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold">{isEditing ? "Edit product" : "Create product"}</h2><p className="mt-1 text-sm text-muted-foreground">{isEditing ? "Changes replace the complete product aggregate." : "Add product details, variants, and images."}</p></div>{isEditing ? <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium">{statusLabel(selectedProduct.status)}</span> : null}</div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold">{isEditing ? "Edit product" : "Create product"}</h2><p className="mt-1 text-sm text-muted-foreground">{isEditing ? "Changes replace the complete product aggregate." : "Add product details, variants, and images."}</p></div>{selectedProduct ? <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium">{statusLabel(selectedProduct.status)}</span> : null}</div>
+        <p className="mt-3 text-sm text-muted-foreground">Draft products are visible only in admin. Published products appear in the public catalog. Featured products appear on the homepage only when Published.</p>
         {message ? <p className="mt-4 rounded-md bg-muted p-3 text-sm" role="status">{message}</p> : null}
         <form className="mt-6 space-y-7" onSubmit={saveProduct}>
           <fieldset disabled={mutationState !== "idle" || isArchived} className="space-y-5 disabled:cursor-not-allowed disabled:opacity-60">
